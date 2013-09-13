@@ -19,16 +19,45 @@ var (
 func TestAtTime(t *testing.T) {
   r := recurring.FirstN(recurring.AtTime(17, 21), 3)
   firstTime := time.Date(2013, 9, 13, 17, 21, 0, 0, time.Local)
-  verifyTimes(t, r.ForTime(kNow), firstTime, firstTime.Add(24 * time.Hour), firstTime.Add(48 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,
+      firstTime.Add(24 * time.Hour),
+      firstTime.Add(48 * time.Hour))
   r = recurring.FirstN(recurring.AtTime(17, 22), 3)
   firstTime = time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
-  verifyTimes(t, r.ForTime(kNow), firstTime, firstTime.Add(24 * time.Hour), firstTime.Add(48 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,
+      firstTime.Add(24 * time.Hour),
+      firstTime.Add(48 * time.Hour))
 }
 
 func TestAtInterval(t *testing.T) {
   r := recurring.FirstN(recurring.AtInterval(time.Hour), 3)
-  firstTime := time.Date(2013, 9, 12, 17, 21, 0, 0, time.Local)
-  verifyTimes(t, r.ForTime(kNow), firstTime, firstTime.Add(time.Hour), firstTime.Add(2 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      kNow.Add(time.Hour),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
+}
+
+func TestCombine(t *testing.T) {
+  r := recurring.FirstN(
+      recurring.Combine(
+          recurring.AtInterval(2 * time.Hour),
+          recurring.AtInterval(3 * time.Hour)),
+      4)
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      kNow.Add(2 *time.Hour),
+      kNow.Add(3 * time.Hour),
+      kNow.Add(4 * time.Hour),
+      kNow.Add(6 * time.Hour))
 }
 
 func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) {

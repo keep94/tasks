@@ -30,7 +30,13 @@ func (f RFunc) ForTime(t time.Time) functional.Stream {
 // Combine combines multiple R instances together and returns them
 // as a single one.
 func Combine(rs ...R) R {
-  return nil
+  return RFunc(func(t time.Time) functional.Stream {
+    streams := make([]functional.Stream, len(rs))
+    for i := range rs {
+      streams[i] = rs[i].ForTime(
+    }
+    return combineStreams(streams)
+  }
 }
 
 // Modify returns a new R instance that uses f to modify the time.Time
@@ -44,7 +50,11 @@ func Modify(r R, f func(s functional.Stream) functional.Stream) R {
 // Filter returns a new R instance that filters the time.Time Streams
 // that r creates
 func Filter(r R, f functional.Filterer) R {
-  return nil
+  return Modify(
+      r,
+      func(s functional.Stream) functional.Stream {
+        return functional.Filter(f, s)
+      })
 }
 
 // FirstN returns a new R instance that generates only the first N
@@ -61,7 +71,7 @@ func FirstN(r R, n int) R {
 // at d intervals.
 func AtInterval(d time.Duration) R {
   return RFunc(func(t time.Time) functional.Stream {
-    return &intervalStream{t: t, d: d}
+    return &intervalStream{t: t.Add(d), d: d}
   })
 }
   
@@ -108,3 +118,48 @@ type closeDoesNothing struct {
 func (n closeDoesNothing) Close() error {
   return nil
 }
+
+func combineStreams(streams []functional.Stream) functional.Stream {
+  h := make(streamHeap, len(streams))
+  for i := range streams {
+    h[i] = &item{stream: streams[i]}
+    h[i].pop()
+  }
+  heap.Init(&h)
+  return &mergeStream{streams: streams, sh: h}
+}
+
+type item struct {
+  stream functional.Stream
+  t time.Time
+  e error
+}
+
+func (i *item) pop() {
+  i.e = i.stream.Next(&i.t)
+}
+
+type streamHeap []*item
+
+func (sh streamHeap) Len() int {
+  return len(sh)
+}
+
+func (sh streamHeap) Less(i, j int) bool {
+  if sh[i].e != nil {
+    return sh[j].e == nil
+  }
+  if sh[j].e != nil {
+    return false
+  }
+  return sh[i].t.Before(sh[j].t)
+}
+
+func (sh streamHeap) Swap(i, j int) {
+  return sh[i], sh[j] = sh[j], sh[i]
+}
+
+func (sh streamHeap) Push(x interface{}) {
+  k
+
+  
