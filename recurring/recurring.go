@@ -8,6 +8,7 @@
 package recurring
 
 import (
+  "container/heap"
   "github.com/keep94/gofunctional3/functional"
   "time"
 )
@@ -33,10 +34,10 @@ func Combine(rs ...R) R {
   return RFunc(func(t time.Time) functional.Stream {
     streams := make([]functional.Stream, len(rs))
     for i := range rs {
-      streams[i] = rs[i].ForTime(
+      streams[i] = rs[i].ForTime(t)
     }
     return combineStreams(streams)
-  }
+  })
 }
 
 // Modify returns a new R instance that uses f to modify the time.Time
@@ -126,7 +127,7 @@ func combineStreams(streams []functional.Stream) functional.Stream {
     h[i].pop()
   }
   heap.Init(&h)
-  return &mergeStream{streams: streams, sh: h}
+  return &mergeStream{orig: streams, sh: h}
 }
 
 type item struct {
@@ -156,10 +157,30 @@ func (sh streamHeap) Less(i, j int) bool {
 }
 
 func (sh streamHeap) Swap(i, j int) {
-  return sh[i], sh[j] = sh[j], sh[i]
+  sh[i], sh[j] = sh[j], sh[i]
 }
 
-func (sh streamHeap) Push(x interface{}) {
-  k
+func (sh *streamHeap) Push(x interface{}) {
+  *sh = append(*sh, x.(*item))
+}
 
-  
+func (sh *streamHeap) Pop() interface{} {
+  old := *sh
+  n := len(old)
+  result := old[n - 1]
+  *sh = old[0:n - 1]
+  return result
+}
+
+type mergeStream struct {
+  orig []functional.Stream
+  sh streamHeap
+}
+
+func (s *mergeStream) Next(ptr interface{}) error {
+  return nil
+}
+
+func (s *mergeStream) Close() error {
+  return nil
+}
