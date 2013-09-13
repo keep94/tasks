@@ -8,6 +8,7 @@ package tasks
 
 import (
   "github.com/keep94/gofunctional3/functional"
+  "github.com/keep94/tasks/recurring"
   "sync"
   "time"
 )
@@ -121,18 +122,10 @@ func (e *Execution) setError(err error) {
   e.err = err
 }
 
-// Recurring represents a recurring time such as each Monday at 7:00.
-type Recurring interface {
-
-  // ForTime returns a Stream of time.Time starting at t. The times that
-  // returned Stream emits shall be after t and be in ascending order.
-  ForTime(t time.Time) functional.Stream
-}
-
 // RecurringTask returns a task that does t at each time that r specifies.
 // The returned task ends when there are no more times from r or if some
 // error happens while executing one of the tasks.
-func RecurringTask(t Task, r Recurring) Task {
+func RecurringTask(t Task, r recurring.R) Task {
   return &recurringTask{t, r}
 }
 
@@ -149,12 +142,12 @@ func SerialTasks(tasks ...Task) Task {
 }
 
 type recurringTask struct {
-  task Task
-  recurring Recurring
+  t Task
+  r recurring.R
 }
 
 func (rt *recurringTask) Do(e *Execution) (err error) {
-  s := rt.recurring.ForTime(e.Now())
+  s := rt.r.ForTime(e.Now())
   defer s.Close()
   var t time.Time
   for err = s.Next(&t); err == nil; err = s.Next(&t) {
@@ -165,7 +158,7 @@ func (rt *recurringTask) Do(e *Execution) (err error) {
     if e.Sleep(dur) {
       return
     }
-    if err = rt.task.Do(e); err != nil {
+    if err = rt.t.Do(e); err != nil {
       return
     }
   }
