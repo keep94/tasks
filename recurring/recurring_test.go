@@ -51,6 +51,24 @@ func TestOnDate(t *testing.T) {
       r.ForTime(kNow))
 }
 
+func TestOnDays(t *testing.T) {
+  r := recurring.FirstN(
+      recurring.Filter(
+          recurring.AtTime(18, 0),
+          recurring.OnDays(recurring.Weekdays)),
+      6)
+  firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,  // Thursday
+      firstTime.AddDate(0, 0, 1), // Friday
+      firstTime.AddDate(0, 0, 4), // Monday
+      firstTime.AddDate(0, 0, 5), // Tuesday
+      firstTime.AddDate(0, 0, 6), // Wednesday
+      firstTime.AddDate(0, 0, 7)) // Thursday
+}
+    
 func TestAfter(t *testing.T) {
   r := recurring.FirstN(recurring.AtTime(14, 22), 2)
   r = recurring.After(r, 3 * time.Hour)

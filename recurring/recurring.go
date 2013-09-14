@@ -13,6 +13,21 @@ import (
   "time"
 )
 
+const (
+  Sunday = 1<<iota
+  Saturday
+  Friday
+  Thursday
+  Wednesday
+  Tuesday
+  Monday
+)
+
+const (
+  Weekdays = Monday | Tuesday | Wednesday | Thursday | Friday
+  Weedend = Saturday | Sunday
+)
+
 // R represents a recurring time such as each Monday at 7:00.
 type R interface {
 
@@ -110,6 +125,19 @@ func OnDate(targetTime time.Time) R {
       return functional.NewStreamFromValues([]time.Time{targetTime}, nil)
     }
     return functional.NilStream()
+  })
+}
+
+// OnDays filters times by day of week. dayMask is the desired days of the
+// week ored together e.g functional.Monday | functional.Tuesday
+func OnDays(dayMask int) functional.Filterer {
+  return functional.NewFilterer(func(ptr interface{}) error {
+    p := ptr.(*time.Time)
+    ourWeekday := uint((7 - p.Weekday()) % 7)
+    if dayMask & (1 << ourWeekday) != 0 {
+      return nil
+    }
+    return functional.Skipped
   })
 }
 
