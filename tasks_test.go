@@ -102,7 +102,7 @@ func TestRecurring(t *testing.T) {
   r := recurring.FirstN(
       recurring.AtInterval(time.Hour),
       2)
-  runForTesting(RecurringTask(timeTask, r), &clockForTesting{kNow})
+  RunForTesting(RecurringTask(timeTask, r), &ClockForTesting{kNow})
   verifyTimes(t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(2 * time.Hour))
 }
 
@@ -140,22 +140,6 @@ type timeStampTask struct {
 func (tt *timeStampTask) Do(e *Execution) error {
   tt.timeStamps = append(tt.timeStamps, e.Now())
   return nil
-}
-
-type clockForTesting struct {
-  now time.Time
-}
-
-func (c *clockForTesting) Now() time.Time {
-  return c.now
-}
-
-func (c *clockForTesting) After(d time.Duration) <-chan time.Time {
-  c.now = c.now.Add(d)
-  result := make(chan time.Time, 1)
-  result <- c.now
-  close(result)
-  return result
 }
 
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {

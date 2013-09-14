@@ -33,7 +33,8 @@ type Clock interface {
   // Now returns the current time
   Now() time.Time
 
-  // After waits for given duration to elapse and then sends current time on the  // returned channel.
+  // After waits for given duration to elapse and then sends current time on
+  // the returned channel.
   After(d time.Duration) <-chan time.Time
 }
 
@@ -50,10 +51,10 @@ type Execution struct {
 // Run executes a task in the current goroutine and exits when the task
 // finishes.
 func Run(task Task) error {
-  return runForTesting(task, systemClock{})
+  return RunForTesting(task, systemClock{})
 }
 
-func runForTesting(task Task, clock Clock) (err error) {
+func RunForTesting(task Task, clock Clock) (err error) {
   execution := &Execution{
       Clock: clock, done: make(chan struct{}), ended: make(chan struct{})}
   execution.setError(task.Do(execution))
@@ -156,6 +157,28 @@ func ParallelTasks(tasks ...Task) Task {
 // series, one after the other.
 func SerialTasks(tasks ...Task) Task {
   return serialTasks(tasks)
+}
+
+// ClockForTesting is a test implementation of Clock.
+// Current time advances only when After() is called.
+type ClockForTesting struct {
+
+  // The current time
+  Current time.Time
+}
+
+func (c *ClockForTesting) Now() time.Time {
+  return c.Current
+}
+
+// After immediately advances current time by d and send that currnet time
+// on the returned channel.
+func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
+  c.Current = c.Current.Add(d)
+  result := make(chan time.Time, 1)
+  result <- c.Current
+  close(result)
+  return result
 }
 
 type recurringTask struct {
