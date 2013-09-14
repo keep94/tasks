@@ -58,6 +58,18 @@ func Filter(r R, f functional.Filterer) R {
       })
 }
 
+// After returns a new R instance that represents duration d after every time
+// in r
+func After(r R, d time.Duration) R {
+  return Filter(
+      r,
+      functional.NewFilterer(func(ptr interface{}) error {
+        p := ptr.(*time.Time)
+        *p = (*p).Add(d)
+        return nil
+      }))
+}
+
 // FirstN returns a new R instance that generates only the first N
 // times that r generates.
 func FirstN(r R, n int) R {
@@ -127,7 +139,7 @@ func combineStreams(streams []functional.Stream) functional.Stream {
     h[i].pop()
   }
   heap.Init(&h)
-  return &mergeStream{orig: streams, sh: h}
+  return &mergeStream{orig: streams, sh: &h}
 }
 
 type item struct {
@@ -167,20 +179,48 @@ func (sh *streamHeap) Push(x interface{}) {
 func (sh *streamHeap) Pop() interface{} {
   old := *sh
   n := len(old)
-  result := old[n - 1]
   *sh = old[0:n - 1]
-  return result
+  return old[n - 1]
 }
 
 type mergeStream struct {
   orig []functional.Stream
-  sh streamHeap
+  sh *streamHeap
+  lastEmitted time.Time
+  started bool
 }
 
 func (s *mergeStream) Next(ptr interface{}) error {
-  return nil
+  for s.sh.Len() > 0 {
+    aitem := heap.Pop(s.sh).(*item)
+    if aitem.e == functional.Done {
+      continue
+    }
+    if aitem.e != nil {
+      return aitem.e
+    }
+    if s.started && aitem.t == s.lastEmitted {
+      aitem.pop()
+      heap.Push(s.sh, aitem)
+      continue
+    }
+    p := ptr.(*time.Time)
+    *p = aitem.t
+    s.started = true
+    s.lastEmitted = aitem.t
+    aitem.pop()
+    heap.Push(s.sh, aitem)
+    return nil
+  }
+  return functional.Done
 }
-
+      
 func (s *mergeStream) Close() error {
-  return nil
+  var result error
+  for _, stream := range s.orig {
+    if err := stream.Close(); err != nil {
+      result = err
+    }
+  }
+  return result
 }
