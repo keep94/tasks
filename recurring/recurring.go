@@ -61,13 +61,15 @@ func Filter(r R, f functional.Filterer) R {
 // After returns a new R instance that represents duration d after every time
 // in r
 func After(r R, d time.Duration) R {
-  return Filter(
-      r,
-      functional.NewFilterer(func(ptr interface{}) error {
-        p := ptr.(*time.Time)
-        *p = (*p).Add(d)
-        return nil
-      }))
+  return RFunc(func(t time.Time) functional.Stream {
+    return functional.Filter(
+        functional.NewFilterer(func(ptr interface{}) error {
+          p := ptr.(*time.Time)
+          *p = (*p).Add(d)
+          return nil
+        }),
+        r.ForTime(t.Add(-1 * d)))
+  })
 }
 
 // FirstN returns a new R instance that generates only the first N

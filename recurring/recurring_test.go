@@ -36,9 +36,18 @@ func TestAtTime(t *testing.T) {
 }
 
 func TestAfter(t *testing.T) {
-  r := recurring.FirstN(recurring.AtTime(17, 21), 2)
+  r := recurring.FirstN(recurring.AtTime(14, 22), 2)
   r = recurring.After(r, 3 * time.Hour)
-  firstTime := time.Date(2013, 9, 13, 20, 21, 0, 0, time.Local)
+  firstTime := time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,
+      firstTime.Add(24 * time.Hour))
+
+  r = recurring.FirstN(recurring.AtTime(14, 21), 2)
+  r = recurring.After(r, 3 * time.Hour)
+  firstTime = time.Date(2013, 9, 13, 17, 21, 0, 0, time.Local)
   verifyTimes(
       t,
       r.ForTime(kNow),
