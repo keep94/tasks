@@ -180,7 +180,6 @@ func (p parallelTasks) Do(e *Execution) (err error) {
     }(task)
   }
   wg.Wait()
-  e.End()
   return
 }
 
