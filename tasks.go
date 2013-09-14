@@ -41,6 +41,7 @@ type Clock interface {
 type Execution struct {
   Clock
   ended chan struct{}
+  bEnded bool
   err error
   lock sync.Mutex
 }
@@ -79,7 +80,9 @@ func (e *Execution) Error() error {
 
 // End ends this execution.
 func (e *Execution) End() {
-  close(e.ended)
+  if e.markEnded() {
+    close(e.ended)
+  }
 }
 
 // Ended returns a channel that gets closed when this execution ends whether
@@ -90,13 +93,9 @@ func (e *Execution) Ended() <-chan struct{} {
 
 // IsEnded returns true if this execution has ended.
 func (e *Execution) IsEnded() bool {
-  select {
-    case <-e.ended:
-      return true
-    default:
-      return false
-  }
-  return false
+  e.lock.Lock()
+  defer e.lock.Unlock()
+  return e.bEnded
 }
 
 // Sleep sleeps for the specified duration ends or until this execution ends,
@@ -120,6 +119,14 @@ func (e *Execution) setError(err error) {
   e.lock.Lock()
   defer e.lock.Unlock()
   e.err = err
+}
+
+func (e *Execution) markEnded() bool {
+  e.lock.Lock()
+  defer e.lock.Unlock()
+  result := !e.bEnded
+  e.bEnded = true
+  return result
 }
 
 // RecurringTask returns a task that does t at each time that r specifies.
