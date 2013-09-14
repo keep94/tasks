@@ -102,6 +102,17 @@ func AtTime(hour24, minute int) R {
   })
 }
 
+// OnDate returns a new R instance that represents happening once on a
+// particular date and time.
+func OnDate(targetTime time.Time) R {
+  return RFunc(func(t time.Time) functional.Stream {
+    if targetTime.After(t) {
+      return functional.NewStreamFromValues([]time.Time{targetTime}, nil)
+    }
+    return functional.NilStream()
+  })
+}
+
 type dateStream struct {
   t time.Time
   closeDoesNothing
