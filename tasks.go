@@ -41,6 +41,7 @@ type Clock interface {
 type Execution struct {
   Clock
   ended chan struct{}
+  done chan struct{}
   bEnded bool
   err error
   lock sync.Mutex
@@ -53,55 +54,64 @@ func Run(task Task) error {
 }
 
 func runForTesting(task Task, clock Clock) (err error) {
-  execution := &Execution{Clock: clock, ended: make(chan struct{})}
+  execution := &Execution{
+      Clock: clock, done: make(chan struct{}), ended: make(chan struct{})}
   execution.setError(task.Do(execution))
   execution.End()
+  close(execution.done)
   return execution.Error()
 }
 
 // Start starts a task in a separate goroutine and returns immediately.
 // Start returns that particular execution of the task.
 func Start(task Task) *Execution {
-  execution := &Execution{Clock: systemClock{}, ended: make(chan struct{})}
+  execution := &Execution{
+      Clock: systemClock{},
+      done: make(chan struct{}),
+      ended: make(chan struct{})}
   go func() {
     execution.setError(task.Do(execution))
     execution.End()
+    close(execution.done)
   }()
   return execution
 }
 
-// Error returns error from this execution. If called before this execution
-// has ended, it returns nil.
+// Error returns error from this execution.
 func (e *Execution) Error() error {
   e.lock.Lock()
   defer e.lock.Unlock()
   return e.err
 }
 
-// End ends this execution.
+// End signals that execution should end.
 func (e *Execution) End() {
   if e.markEnded() {
     close(e.ended)
   }
 }
 
-// Ended returns a channel that gets closed when this execution ends whether
-// naturaly or because End was called on this execution.
+// Ended returns a channel that gets closed when this execution is signaled
+// to end.
 func (e *Execution) Ended() <-chan struct{} {
   return e.ended
 }
 
-// IsEnded returns true if this execution has ended.
+// Done returns a channel that gets closed when this execution is done.
+func (e *Execution) Done() <-chan struct{} {
+  return e.done
+}
+
+// IsEnded returns true if this execution has been signaled to end.
 func (e *Execution) IsEnded() bool {
   e.lock.Lock()
   defer e.lock.Unlock()
   return e.bEnded
 }
 
-// Sleep sleeps for the specified duration ends or until this execution ends,
-// whichever comes first. Sleep returns true if this execution ended while
-// sleeping or false otherwise. If execution ends while sleeping, Sleep may
-// return before Duration d elapses.
+// Sleep sleeps for the specified duration ends or until this execution should
+// end, whichever comes first. Sleep returns true if this execution has been
+// signaled to end or false otherwise.
 func (e *Execution) Sleep(d time.Duration) bool {
   select {
     case <-e.ended:
@@ -196,7 +206,6 @@ func (s serialTasks) Do(e *Execution) (err error) {
   for _, task := range s {
     e.setError(task.Do(e))
   }
-  e.End()
   return
 }
 
