@@ -17,14 +17,14 @@ import (
 type Task interface {
 
   // Do performs the task. execution is the specific execution of this task.
-  Do(execution *Execution) error
+  Do(execution *Execution)
 }
 
 // TaskFunc wraps a simple function to implement Task.
-type TaskFunc func(execution *Execution) error
+type TaskFunc func(execution *Execution)
 
-func (f TaskFunc) Do(execution *Execution) error {
-  return f(execution)
+func (f TaskFunc) Do(execution *Execution) {
+  f(execution)
 }
 
 // Clock represents the system clock.
@@ -54,10 +54,12 @@ func Run(task Task) error {
   return RunForTesting(task, systemClock{})
 }
 
+// RunForTesting work just like Run except it allows caller to specify
+// an implementation of the Clock interface for testing.
 func RunForTesting(task Task, clock Clock) (err error) {
   execution := &Execution{
       Clock: clock, done: make(chan struct{}), ended: make(chan struct{})}
-  execution.setError(task.Do(execution))
+  task.Do(execution)
   execution.End()
   close(execution.done)
   return execution.Error()
@@ -71,7 +73,7 @@ func Start(task Task) *Execution {
       done: make(chan struct{}),
       ended: make(chan struct{})}
   go func() {
-    execution.setError(task.Do(execution))
+    task.Do(execution)
     execution.End()
     close(execution.done)
   }()
@@ -123,7 +125,8 @@ func (e *Execution) Sleep(d time.Duration) bool {
   return false
 }
 
-func (e *Execution) setError(err error) {
+// SetError lets a task report an error.
+func (e *Execution) SetError(err error) {
   if err == nil {
     return
   }
@@ -148,9 +151,7 @@ func RecurringTask(t Task, r recurring.R) Task {
 }
 
 // ParallelTasks returns a task that performs all the passed in tasks in
-// parallel. The Do method of the returned Task always returns nil. However
-// if one of the individual tasks in tasks returns an error that error still
-// gets stored in the Execution object.
+// parallel.
 func ParallelTasks(tasks ...Task) Task {
   return parallelTasks(tasks)
 }
@@ -182,10 +183,11 @@ type recurringTask struct {
   r recurring.R
 }
 
-func (rt *recurringTask) Do(e *Execution) (err error) {
+func (rt *recurringTask) Do(e *Execution) {
   s := rt.r.ForTime(e.Now())
   defer s.Close()
   var t time.Time
+  var err error
   for err = s.Next(&t); err == nil; err = s.Next(&t) {
     dur := t.Sub(e.Now())
     if dur <= 0 {
@@ -194,29 +196,28 @@ func (rt *recurringTask) Do(e *Execution) (err error) {
     if !e.Sleep(dur) {
       return
     }
-    if err = rt.t.Do(e); err != nil {
+    rt.t.Do(e)
+    if e.Error() != nil {
       return
     }
   }
-  if err == functional.Done {
-    err = nil
+  if err != functional.Done {
+    e.SetError(err)
   }
-  return
 }
 
 type parallelTasks []Task
 
-func (p parallelTasks) Do(e *Execution) (err error) {
+func (p parallelTasks) Do(e *Execution) {
   var wg sync.WaitGroup
   wg.Add(len(p))
   for _, task := range p {
     go func(t Task) {
-      e.setError(t.Do(e))
+      t.Do(e)
       wg.Done()
     }(task)
   }
   wg.Wait()
-  return
 }
 
 type systemClock struct {

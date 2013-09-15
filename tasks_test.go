@@ -97,36 +97,33 @@ type hasRunTask struct {
   hasRun bool
 }
 
-func (bt *hasRunTask) Do(e *Execution) error {
+func (bt *hasRunTask) Do(e *Execution) {
   bt.hasRun = true
-  return nil
 }
 
 type longRunningTask struct {
   hasRun bool
 }
 
-func (lt *longRunningTask) Do(e *Execution) error {
+func (lt *longRunningTask) Do(e *Execution) {
   e.Sleep(time.Hour)
   lt.hasRun = true
-  return nil
 }
 
 type errorTask struct {
   err error
 }
 
-func (et *errorTask) Do(e *Execution) error {
-  return et.err
+func (et *errorTask) Do(e *Execution) {
+  e.SetError(et.err)
 }
 
 type timeStampTask struct {
   timeStamps []time.Time
 }
 
-func (tt *timeStampTask) Do(e *Execution) error {
+func (tt *timeStampTask) Do(e *Execution) {
   tt.timeStamps = append(tt.timeStamps, e.Now())
-  return nil
 }
 
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
