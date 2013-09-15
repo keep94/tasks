@@ -3,10 +3,11 @@
 // license that can be found in the LICENSE file or
 // at http://opensource.org/licenses/BSD-3-Clause.
 
-package tasks
+package tasks_test
 
 import (
   "errors"
+  "github.com/keep94/tasks"
   "github.com/keep94/tasks/recurring"
   "testing"
   "time"
@@ -18,11 +19,11 @@ var (
 )
 
 func TestParallel(t *testing.T) {
-  testTasks := make([]Task, 20)
+  testTasks := make([]tasks.Task, 20)
   for i := range testTasks {
     testTasks[i] = &hasRunTask{}
   }
-  e := Start(ParallelTasks(testTasks...))
+  e := tasks.Start(tasks.ParallelTasks(testTasks...))
   <-e.Done()
 
   // Blocking here is not necessary in production code. Just testing that
@@ -38,7 +39,7 @@ func TestParallel(t *testing.T) {
 
 func TestEndTask(t *testing.T) {
   longTask := &longRunningTask{}
-  e := Start(longTask)
+  e := tasks.Start(longTask)
   if e.IsEnded() {
     t.Error("Expected IsEnded() to be false.")
   }
@@ -54,7 +55,7 @@ func TestEndTask(t *testing.T) {
 
 func TestNoError(t *testing.T) {
   eTask := &errorTask{}
-  e := Start(eTask)
+  e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != nil {
     t.Error("Expected no error.")
@@ -63,14 +64,14 @@ func TestNoError(t *testing.T) {
 
 func TestNoError2(t *testing.T) {
   eTask := &errorTask{}
-  if err := Run(eTask); err != nil {
+  if err := tasks.Run(eTask); err != nil {
     t.Error("Expected no error.")
   }
 }
 
 func TestError(t *testing.T) {
   eTask := &errorTask{kSomeError}
-  e := Start(eTask)
+  e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != kSomeError {
     t.Error("Expected some error.")
@@ -79,7 +80,7 @@ func TestError(t *testing.T) {
 
 func TestError2(t *testing.T) {
   eTask := &errorTask{kSomeError}
-  if err := Run(eTask); err != kSomeError {
+  if err := tasks.Run(eTask); err != kSomeError {
     t.Error("Expected some error.")
   }
 }
@@ -89,15 +90,17 @@ func TestRecurring(t *testing.T) {
   r := recurring.FirstN(
       recurring.AtInterval(time.Hour),
       2)
-  RunForTesting(RecurringTask(timeTask, r), &ClockForTesting{kNow})
-  verifyTimes(t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(2 * time.Hour))
+  tasks.RunForTesting(
+      tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
+  verifyTimes(
+      t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(2 * time.Hour))
 }
 
 type hasRunTask struct {
   hasRun bool
 }
 
-func (bt *hasRunTask) Do(e *Execution) {
+func (bt *hasRunTask) Do(e *tasks.Execution) {
   bt.hasRun = true
 }
 
@@ -105,7 +108,7 @@ type longRunningTask struct {
   hasRun bool
 }
 
-func (lt *longRunningTask) Do(e *Execution) {
+func (lt *longRunningTask) Do(e *tasks.Execution) {
   e.Sleep(time.Hour)
   lt.hasRun = true
 }
@@ -114,7 +117,7 @@ type errorTask struct {
   err error
 }
 
-func (et *errorTask) Do(e *Execution) {
+func (et *errorTask) Do(e *tasks.Execution) {
   e.SetError(et.err)
 }
 
@@ -122,7 +125,7 @@ type timeStampTask struct {
   timeStamps []time.Time
 }
 
-func (tt *timeStampTask) Do(e *Execution) {
+func (tt *timeStampTask) Do(e *tasks.Execution) {
   tt.timeStamps = append(tt.timeStamps, e.Now())
 }
 
