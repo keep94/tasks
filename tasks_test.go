@@ -39,7 +39,13 @@ func TestParallel(t *testing.T) {
 func TestEndTask(t *testing.T) {
   longTask := &longRunningTask{}
   e := Start(longTask)
+  if e.IsEnded() {
+    t.Error("Expected IsEnded() to be false.")
+  }
   e.End()
+  if !e.IsEnded() {
+    t.Error("Expected IsEnded() to be true.")
+  }
   <-e.Done()
   if !longTask.hasRun {
     t.Error("Expected task to be run.")
@@ -126,6 +132,7 @@ func (tt *timeStampTask) Do(e *Execution) error {
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
   if len(actual) != len(expected) {
     t.Errorf("Expected %v timestamps, got %v", len(expected), len(actual))
+    return
   }
   for i := range expected {
     if expected[i] != actual[i] {

@@ -111,14 +111,14 @@ func (e *Execution) IsEnded() bool {
 }
 
 // Sleep sleeps for the specified duration ends or until this execution should
-// end, whichever comes first. Sleep returns true if this execution has been
-// signaled to end or false otherwise.
+// end, whichever comes first. Sleep returns true if it slept the entire
+// duration or false if it returned early because this execution should end.
 func (e *Execution) Sleep(d time.Duration) bool {
   select {
     case <-e.ended:
-      return true
-    case <-e.After(d):
       return false
+    case <-e.After(d):
+      return true
   }
   return false
 }
@@ -191,7 +191,7 @@ func (rt *recurringTask) Do(e *Execution) (err error) {
     if dur <= 0 {
       continue
     }
-    if e.Sleep(dur) {
+    if !e.Sleep(dur) {
       return
     }
     if err = rt.t.Do(e); err != nil {
