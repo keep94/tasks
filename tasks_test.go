@@ -36,25 +36,6 @@ func TestParallel(t *testing.T) {
   }
 }
 
-func TestSeries(t *testing.T) {
-  testTasks := make([]Task, 20)
-  for i := range testTasks {
-    testTasks[i] = &hasRunTask{}
-  }
-  e := Start(SerialTasks(testTasks...))
-  <-e.Done()
-
-  // Blocking here is not necessary in production code. Just testing that
-  // this channel gets closed too.
-  <-e.Ended()
-  for _, atask := range testTasks {
-    bt := atask.(*hasRunTask)
-    if !bt.hasRun {
-      t.Error("Expected task to be run.")
-    }
-  }
-}
-
 func TestEndTask(t *testing.T) {
   longTask := &longRunningTask{}
   e := Start(longTask)

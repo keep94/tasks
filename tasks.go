@@ -148,15 +148,11 @@ func RecurringTask(t Task, r recurring.R) Task {
 }
 
 // ParallelTasks returns a task that performs all the passed in tasks in
-// parallel.
+// parallel. The Do method of the returned Task always returns nil. However
+// if one of the individual tasks in tasks returns an error that error still
+// gets stored in the Execution object.
 func ParallelTasks(tasks ...Task) Task {
   return parallelTasks(tasks)
-}
-
-// SerialTasks returns a task that performs all the passed in tasks in
-// series, one after the other.
-func SerialTasks(tasks ...Task) Task {
-  return serialTasks(tasks)
 }
 
 // ClockForTesting is a test implementation of Clock.
@@ -220,15 +216,6 @@ func (p parallelTasks) Do(e *Execution) (err error) {
     }(task)
   }
   wg.Wait()
-  return
-}
-
-type serialTasks []Task
-
-func (s serialTasks) Do(e *Execution) (err error) {
-  for _, task := range s {
-    e.setError(task.Do(e))
-  }
   return
 }
 
