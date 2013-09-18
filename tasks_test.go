@@ -67,6 +67,34 @@ func TestSeries(t *testing.T) {
   }
 }
 
+func TestRepeatingTask(t *testing.T) {
+  task := &hasRunTask{}
+  e := tasks.Start(tasks.RepeatingTask(task, 5))
+  <-e.Done()
+  if task.timesRun != 5 {
+    t.Errorf("Expected 5, got %v", task.timesRun)
+  }
+}
+
+func TestRepeatingTaskEnded(t *testing.T) {
+  task := &longRunningTask{}
+  e := tasks.Start(tasks.RepeatingTask(task, 5))
+  e.End()
+  <-e.Done()
+  if task.timesRun != 1 {
+    t.Errorf("Expected 1, got %v", task.timesRun)
+  }
+}
+
+func TestRepeatingTaskError(t *testing.T) {
+  task := &errorTask{err: kSomeError}
+  e := tasks.Start(tasks.RepeatingTask(task, 5))
+  <-e.Done()
+  if task.timesRun != 1 {
+    t.Errorf("Expected 1, got %v", task.timesRun)
+  }
+}
+
 func TestEndTask(t *testing.T) {
   longTask := &longRunningTask{}
   e := tasks.Start(longTask)
@@ -154,29 +182,35 @@ func TestRecurring(t *testing.T) {
 
 type hasRunTask struct {
   hasRun bool
+  timesRun int
 }
 
 func (hrt *hasRunTask) Do(e *tasks.Execution) {
   hrt.hasRun = true
+  hrt.timesRun++
 }
 
 type longRunningTask struct {
   hasRun bool
+  timesRun int
 }
 
 func (lt *longRunningTask) Do(e *tasks.Execution) {
   e.Sleep(time.Hour)
   lt.hasRun = true
+  lt.timesRun++
 }
 
 type errorTask struct {
   err error
   hasRun bool
+  timesRun int
 }
 
 func (et *errorTask) Do(e *tasks.Execution) {
   e.SetError(et.err)
   et.hasRun = true
+  et.timesRun++
 }
 
 type timeStampTask struct {

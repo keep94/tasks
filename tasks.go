@@ -163,6 +163,11 @@ func SeriesTasks(tasks ...Task) Task {
   return seriesTasks(tasks)
 }
 
+// RepeatingTask returns a task that performs the pased in task n times.
+func RepeatingTask(t Task, n int) Task {
+  return &repeatingTask{t, n}
+}
+
 // ClockForTesting is a test implementation of Clock.
 // Current time advances only when After() is called.
 type ClockForTesting struct {
@@ -232,6 +237,20 @@ type seriesTasks []Task
 func (s seriesTasks) Do(e *Execution) {
   for _, task := range s {
     task.Do(e)
+    if e.IsEnded() || e.Error() != nil {
+      return
+    }
+  }
+}
+
+type repeatingTask struct {
+  t Task
+  n int
+}
+
+func (r *repeatingTask) Do(e *Execution) {
+  for i := 0; i < r.n; i++ {
+    r.t.Do(e)
     if e.IsEnded() || e.Error() != nil {
       return
     }
