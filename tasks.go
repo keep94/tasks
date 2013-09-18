@@ -156,6 +156,13 @@ func ParallelTasks(tasks ...Task) Task {
   return parallelTasks(tasks)
 }
 
+// SeriesTasks returns a task that performas all the passed in tasks in
+// series. If one of the tasks reports an error, the others following it
+// don't get executed.
+func SeriesTasks(tasks ...Task) Task {
+  return seriesTasks(tasks)
+}
+
 // ClockForTesting is a test implementation of Clock.
 // Current time advances only when After() is called.
 type ClockForTesting struct {
@@ -218,6 +225,17 @@ func (p parallelTasks) Do(e *Execution) {
     }(task)
   }
   wg.Wait()
+}
+
+type seriesTasks []Task 
+
+func (s seriesTasks) Do(e *Execution) {
+  for _, task := range s {
+    task.Do(e)
+    if e.IsEnded() || e.Error() != nil {
+      return
+    }
+  }
 }
 
 type systemClock struct {

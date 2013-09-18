@@ -15,7 +15,7 @@ import (
 
 var (
   kNow = time.Date(2013, 9, 12, 17, 21, 0, 0, time.Local)
-  kSomeError = errors.New("some error")
+  kSomeError = errors.New("tasks: some error")
 )
 
 func TestParallel(t *testing.T) {
@@ -30,9 +30,39 @@ func TestParallel(t *testing.T) {
   // this channel gets closed too.
   <-e.Ended()
   for _, atask := range testTasks {
-    bt := atask.(*hasRunTask)
-    if !bt.hasRun {
+    hrt := atask.(*hasRunTask)
+    if !hrt.hasRun {
       t.Error("Expected task to be run.")
+    }
+  }
+}
+
+func TestSeries(t *testing.T) {
+  // three tasks
+  testTasks := make([]tasks.Task, 3)
+
+  // second task throws an error
+  for i := range testTasks {
+    if i == 1 {
+      testTasks[i] = &errorTask{err: kSomeError}
+    } else {
+      testTasks[i] = &errorTask{}
+    }
+  }
+  e := tasks.Start(tasks.SeriesTasks(testTasks...))
+  <-e.Done()
+
+  // First 2 tasks should have been but not 3rd task
+  for i, atask := range testTasks {
+    et := atask.(*errorTask)
+    if i < 2 {
+      if !et.hasRun {
+        t.Errorf("Expected task %d to be run.", i)
+      }
+    } else {
+      if et.hasRun {
+        t.Errorf("Expected task %d not to be run.", i)
+      }
     }
   }
 }
@@ -53,6 +83,32 @@ func TestEndTask(t *testing.T) {
   }
 }
 
+func TestEndTaskSeries(t *testing.T) {
+  // two tasks
+  testTasks := make([]tasks.Task, 2)
+
+  for i := range testTasks {
+    testTasks[i] = &longRunningTask{}
+  }
+  e := tasks.Start(tasks.SeriesTasks(testTasks...))
+  e.End()
+  <-e.Done()
+
+  // 2nd task should not be reached.
+  for i, atask := range testTasks {
+    et := atask.(*longRunningTask)
+    if i < 1 {
+      if !et.hasRun {
+        t.Errorf("Expected task %d to be run.", i)
+      }
+    } else {
+      if et.hasRun {
+        t.Errorf("Expected task %d not to be run.", i)
+      }
+    }
+  }
+}
+
 func TestNoError(t *testing.T) {
   eTask := &errorTask{}
   e := tasks.Start(eTask)
@@ -70,7 +126,7 @@ func TestNoError2(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
-  eTask := &errorTask{kSomeError}
+  eTask := &errorTask{err: kSomeError}
   e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != kSomeError {
@@ -79,7 +135,7 @@ func TestError(t *testing.T) {
 }
 
 func TestError2(t *testing.T) {
-  eTask := &errorTask{kSomeError}
+  eTask := &errorTask{err: kSomeError}
   if err := tasks.Run(eTask); err != kSomeError {
     t.Error("Expected some error.")
   }
@@ -100,8 +156,8 @@ type hasRunTask struct {
   hasRun bool
 }
 
-func (bt *hasRunTask) Do(e *tasks.Execution) {
-  bt.hasRun = true
+func (hrt *hasRunTask) Do(e *tasks.Execution) {
+  hrt.hasRun = true
 }
 
 type longRunningTask struct {
@@ -115,10 +171,12 @@ func (lt *longRunningTask) Do(e *tasks.Execution) {
 
 type errorTask struct {
   err error
+  hasRun bool
 }
 
 func (et *errorTask) Do(e *tasks.Execution) {
   e.SetError(et.err)
+  et.hasRun = true
 }
 
 type timeStampTask struct {
