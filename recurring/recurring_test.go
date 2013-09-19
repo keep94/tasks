@@ -124,6 +124,17 @@ func TestCombine2(t *testing.T) {
       r.ForTime(kNow))
 }
 
+func TestCombine3(t *testing.T) {
+  r := recurring.Combine(
+      recurring.FirstN(recurring.AtInterval(2 * time.Hour), 0),
+      recurring.FirstN(recurring.AtInterval(3 * time.Hour), 2))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      kNow.Add(3 * time.Hour),
+      kNow.Add(6 * time.Hour))
+}
+
 func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) {
   var actual time.Time
   for _, expected := range expectedTimes {

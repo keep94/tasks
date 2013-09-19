@@ -173,11 +173,25 @@ func TestRecurring(t *testing.T) {
   timeTask := &timeStampTask{}
   r := recurring.FirstN(
       recurring.AtInterval(time.Hour),
-      2)
+      3)
   tasks.RunForTesting(
       tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
   verifyTimes(
-      t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(2 * time.Hour))
+      t, timeTask.timeStamps,
+      kNow.Add(time.Hour),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
+}
+
+func TestRecurringOverrun(t *testing.T) {
+  timeTask := &timeStampTask{runDuration: time.Hour}
+  r := recurring.FirstN(
+      recurring.AtInterval(time.Hour),
+      3)
+  tasks.RunForTesting(
+      tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
+  verifyTimes(
+      t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(3 * time.Hour))
 }
 
 type hasRunTask struct {
@@ -214,11 +228,13 @@ func (et *errorTask) Do(e *tasks.Execution) {
 }
 
 type timeStampTask struct {
+  runDuration time.Duration
   timeStamps []time.Time
 }
 
 func (tt *timeStampTask) Do(e *tasks.Execution) {
   tt.timeStamps = append(tt.timeStamps, e.Now())
+  e.Sleep(tt.runDuration)
 }
 
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
