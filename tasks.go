@@ -105,11 +105,27 @@ func (e *Execution) Done() <-chan struct{} {
   return e.done
 }
 
+// IsDone returns true if this execution is done or false if it is still
+// in progress.
+func (e *Execution) IsDone() bool {
+  select {
+    case <-e.done:
+      return true
+    default:
+      return false
+  }
+  return false
+}
+
 // IsEnded returns true if this execution has been signaled to end.
 func (e *Execution) IsEnded() bool {
-  e.lock.Lock()
-  defer e.lock.Unlock()
-  return e.bEnded
+  select {
+    case <-e.ended:
+      return true
+    default:
+      return false
+  }
+  return false
 }
 
 // Sleep sleeps for the specified duration ends or until this execution should

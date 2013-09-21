@@ -101,11 +101,17 @@ func TestEndTask(t *testing.T) {
   if e.IsEnded() {
     t.Error("Expected IsEnded() to be false.")
   }
+  if e.IsDone() {
+    t.Error("Expected IsDone() to be false.")
+  }
   e.End()
   if !e.IsEnded() {
     t.Error("Expected IsEnded() to be true.")
   }
   <-e.Done()
+  if !e.IsDone() {
+    t.Error("Expected IsDone() to be true.")
+  }
   if !longTask.hasRun {
     t.Error("Expected task to be run.")
   }
@@ -248,3 +254,4 @@ func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
     }
   }
 }
+
