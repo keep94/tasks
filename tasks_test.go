@@ -21,7 +21,7 @@ var (
 func TestParallel(t *testing.T) {
   testTasks := make([]tasks.Task, 20)
   for i := range testTasks {
-    testTasks[i] = &hasRunTask{}
+    testTasks[i] = &fakeTask{}
   }
   e := tasks.Start(tasks.ParallelTasks(testTasks...))
   <-e.Done()
@@ -30,8 +30,8 @@ func TestParallel(t *testing.T) {
   // this channel gets closed too.
   <-e.Ended()
   for _, atask := range testTasks {
-    hrt := atask.(*hasRunTask)
-    if !hrt.hasRun {
+    ft := atask.(*fakeTask)
+    if !ft.hasRun() {
       t.Error("Expected task to be run.")
     }
   }
@@ -44,9 +44,9 @@ func TestSeries(t *testing.T) {
   // second task throws an error
   for i := range testTasks {
     if i == 1 {
-      testTasks[i] = &errorTask{err: kSomeError}
+      testTasks[i] = &fakeTask{err: kSomeError}
     } else {
-      testTasks[i] = &errorTask{}
+      testTasks[i] = &fakeTask{}
     }
   }
   e := tasks.Start(tasks.SeriesTasks(testTasks...))
@@ -54,13 +54,13 @@ func TestSeries(t *testing.T) {
 
   // First 2 tasks should have been but not 3rd task
   for i, atask := range testTasks {
-    et := atask.(*errorTask)
+    ft := atask.(*fakeTask)
     if i < 2 {
-      if !et.hasRun {
+      if !ft.hasRun() {
         t.Errorf("Expected task %d to be run.", i)
       }
     } else {
-      if et.hasRun {
+      if ft.hasRun() {
         t.Errorf("Expected task %d not to be run.", i)
       }
     }
@@ -68,7 +68,7 @@ func TestSeries(t *testing.T) {
 }
 
 func TestRepeatingTask(t *testing.T) {
-  task := &hasRunTask{}
+  task := &fakeTask{}
   e := tasks.Start(tasks.RepeatingTask(task, 5))
   <-e.Done()
   if task.timesRun != 5 {
@@ -77,7 +77,7 @@ func TestRepeatingTask(t *testing.T) {
 }
 
 func TestRepeatingTaskEnded(t *testing.T) {
-  task := &longRunningTask{}
+  task := &fakeTask{runDuration: time.Hour}
   e := tasks.Start(tasks.RepeatingTask(task, 5))
   e.End()
   <-e.Done()
@@ -87,7 +87,7 @@ func TestRepeatingTaskEnded(t *testing.T) {
 }
 
 func TestRepeatingTaskError(t *testing.T) {
-  task := &errorTask{err: kSomeError}
+  task := &fakeTask{err: kSomeError}
   e := tasks.Start(tasks.RepeatingTask(task, 5))
   <-e.Done()
   if task.timesRun != 1 {
@@ -96,7 +96,7 @@ func TestRepeatingTaskError(t *testing.T) {
 }
 
 func TestEndTask(t *testing.T) {
-  longTask := &longRunningTask{}
+  longTask := &fakeTask{runDuration: time.Hour}
   e := tasks.Start(longTask)
   if e.IsEnded() {
     t.Error("Expected IsEnded() to be false.")
@@ -112,7 +112,7 @@ func TestEndTask(t *testing.T) {
   if !e.IsDone() {
     t.Error("Expected IsDone() to be true.")
   }
-  if !longTask.hasRun {
+  if !longTask.hasRun() {
     t.Error("Expected task to be run.")
   }
 }
@@ -122,7 +122,7 @@ func TestEndTaskSeries(t *testing.T) {
   testTasks := make([]tasks.Task, 2)
 
   for i := range testTasks {
-    testTasks[i] = &longRunningTask{}
+    testTasks[i] = &fakeTask{runDuration: time.Hour}
   }
   e := tasks.Start(tasks.SeriesTasks(testTasks...))
   e.End()
@@ -130,13 +130,13 @@ func TestEndTaskSeries(t *testing.T) {
 
   // 2nd task should not be reached.
   for i, atask := range testTasks {
-    et := atask.(*longRunningTask)
+    ft := atask.(*fakeTask)
     if i < 1 {
-      if !et.hasRun {
+      if !ft.hasRun() {
         t.Errorf("Expected task %d to be run.", i)
       }
     } else {
-      if et.hasRun {
+      if ft.hasRun() {
         t.Errorf("Expected task %d not to be run.", i)
       }
     }
@@ -144,7 +144,7 @@ func TestEndTaskSeries(t *testing.T) {
 }
 
 func TestNoError(t *testing.T) {
-  eTask := &errorTask{}
+  eTask := &fakeTask{}
   e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != nil {
@@ -153,14 +153,14 @@ func TestNoError(t *testing.T) {
 }
 
 func TestNoError2(t *testing.T) {
-  eTask := &errorTask{}
+  eTask := &fakeTask{}
   if err := tasks.Run(eTask); err != nil {
     t.Error("Expected no error.")
   }
 }
 
 func TestError(t *testing.T) {
-  eTask := &errorTask{err: kSomeError}
+  eTask := &fakeTask{err: kSomeError}
   e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != kSomeError {
@@ -169,14 +169,14 @@ func TestError(t *testing.T) {
 }
 
 func TestError2(t *testing.T) {
-  eTask := &errorTask{err: kSomeError}
+  eTask := &fakeTask{err: kSomeError}
   if err := tasks.Run(eTask); err != kSomeError {
     t.Error("Expected some error.")
   }
 }
 
 func TestRecurring(t *testing.T) {
-  timeTask := &timeStampTask{}
+  timeTask := &fakeTask{}
   r := recurring.FirstN(
       recurring.AtInterval(time.Hour),
       3)
@@ -190,7 +190,7 @@ func TestRecurring(t *testing.T) {
 }
 
 func TestRecurringOverrun(t *testing.T) {
-  timeTask := &timeStampTask{runDuration: time.Hour}
+  timeTask := &fakeTask{runDuration: time.Hour}
   r := recurring.FirstN(
       recurring.AtInterval(time.Hour),
       3)
@@ -200,47 +200,38 @@ func TestRecurringOverrun(t *testing.T) {
       t, timeTask.timeStamps, kNow.Add(time.Hour), kNow.Add(3 * time.Hour))
 }
 
-type hasRunTask struct {
-  hasRun bool
-  timesRun int
+func TestRecurringError(t *testing.T) {
+  timeTask := &fakeTask{err: kSomeError}
+  r := recurring.FirstN(
+      recurring.AtInterval(time.Hour),
+      3)
+  tasks.RunForTesting(
+      tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
+  verifyTimes(
+      t, timeTask.timeStamps,
+      kNow.Add(time.Hour))
 }
 
-func (hrt *hasRunTask) Do(e *tasks.Execution) {
-  hrt.hasRun = true
-  hrt.timesRun++
-}
-
-type longRunningTask struct {
-  hasRun bool
-  timesRun int
-}
-
-func (lt *longRunningTask) Do(e *tasks.Execution) {
-  e.Sleep(time.Hour)
-  lt.hasRun = true
-  lt.timesRun++
-}
-
-type errorTask struct {
-  err error
-  hasRun bool
-  timesRun int
-}
-
-func (et *errorTask) Do(e *tasks.Execution) {
-  e.SetError(et.err)
-  et.hasRun = true
-  et.timesRun++
-}
-
-type timeStampTask struct {
+type fakeTask struct {
   runDuration time.Duration
-  timeStamps []time.Time
+  err error
+  timeStamps []time.Time  // times when task was started
+  timesRun int            // Number of completed runs.
 }
 
-func (tt *timeStampTask) Do(e *tasks.Execution) {
-  tt.timeStamps = append(tt.timeStamps, e.Now())
-  e.Sleep(tt.runDuration)
+func (ft *fakeTask) Do(e *tasks.Execution) {
+  ft.timeStamps = append(ft.timeStamps, e.Now())
+  if ft.err != nil {
+    e.SetError(ft.err)
+  }
+  if ft.runDuration > 0 {
+    e.Sleep(ft.runDuration)
+  }
+  ft.timesRun++
+}
+
+func (ft *fakeTask) hasRun() bool {
+  return ft.timesRun > 0
 }
 
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
