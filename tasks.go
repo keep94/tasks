@@ -243,6 +243,13 @@ func (se *SimpleExecutor) Current() (Task, *Execution) {
   return se.task, se.execution
 }
 
+// Close frees the resources of this instance and always returns nil. Close
+// interrupts any currently running task.
+func (se *SimpleExecutor) Close() error {
+  close(se.taskCh)
+  return nil
+}
+
 func (se *SimpleExecutor) setCurrent(t Task, e *Execution) {
   se.lock.Lock()
   defer se.lock.Unlock()
@@ -255,6 +262,10 @@ func (se *SimpleExecutor) loop() {
     // If we don't already have a task to run, wait until we get one.
     if t == nil {
       t = <-se.taskCh
+      if t == nil {  // Our taskCh has been closed.
+        close(se.taskRetCh)
+        return
+      }
     }
     // Start task
     e := Start(t)
@@ -270,6 +281,10 @@ func (se *SimpleExecutor) loop() {
       case t = <-se.taskCh:
         e.End()
         <-e.Done()
+        if t == nil {  // Our taskCh has been closed.
+          close(se.taskRetCh)
+          return
+        }
     }
     se.setCurrent(nil, nil)
   }

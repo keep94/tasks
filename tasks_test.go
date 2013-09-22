@@ -218,6 +218,7 @@ func TestSimpleExecutorStart(t *testing.T) {
   task2 := &fakeTask{runDuration: time.Millisecond}
   task3 := &fakeTask{runDuration: time.Millisecond}
   se := tasks.NewSimpleExecutor()
+  defer se.Close()
   e := se.Start(task1)
   if tk, ex := se.Current(); tk.(*fakeTask) != task1 || ex != e {
     t.Error("Expect Current to be task 1.")
@@ -247,6 +248,7 @@ func TestSimpleExecutorForceStart(t *testing.T) {
   task2 := &fakeTask{runDuration: time.Hour}
   task3 := &fakeTask{runDuration: time.Hour}
   se := tasks.NewSimpleExecutor()
+  defer se.Close()
   e1 := se.Start(task1)
   e2 := se.Start(task2)
   e3 := se.Start(task3)
@@ -267,6 +269,7 @@ func TestSimpleExecutorMultiThread(t *testing.T) {
   var wg sync.WaitGroup
   wg.Add(len(fakeTasks))
   se := tasks.NewSimpleExecutor()
+  defer se.Close()
   for i := range fakeTasks {
     go func(t tasks.Task) {
       e := se.Start(t)
@@ -280,6 +283,14 @@ func TestSimpleExecutorMultiThread(t *testing.T) {
       t.Error("Expected each task to be run exactly once.")
     }
   }
+}
+
+func TestSimpleExecutorClose(t *testing.T) {
+  task1 := &fakeTask{runDuration: time.Hour}
+  se := tasks.NewSimpleExecutor()
+  e := se.Start(task1)
+  se.Close()
+  <-e.Done()
 }
 
 type fakeTask struct {
