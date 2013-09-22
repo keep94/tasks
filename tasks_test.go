@@ -38,7 +38,83 @@ func TestParallel(t *testing.T) {
   }
 }
 
+func TestParallelEnded(t *testing.T) {
+  testTasks := make([]tasks.Task, 20)
+  for i := range testTasks {
+    testTasks[i] = &fakeTask{runDuration: time.Hour}
+  }
+  e := tasks.Start(tasks.ParallelTasks(testTasks...))
+  e.End()
+  <-e.Done()
+  for _, atask := range testTasks {
+    ft := atask.(*fakeTask)
+    if !ft.hasRun() {
+      t.Error("Expected task to be run.")
+    }
+  }
+}
+
+func TestParallelError(t *testing.T) {
+  testTasks := make([]tasks.Task, 20)
+  for i := range testTasks {
+    if i == 5 {
+      testTasks[i] = &fakeTask{err: kSomeError}
+    } else {
+      testTasks[i] = &fakeTask{}
+    }
+  }
+  e := tasks.Start(tasks.ParallelTasks(testTasks...))
+  <-e.Done()
+  if e.Error() != kSomeError {
+    t.Error("Expected to get an error.")
+  }
+}
+
 func TestSeries(t *testing.T) {
+  // three tasks
+  testTasks := make([]tasks.Task, 3)
+
+  // second task throws an error
+  for i := range testTasks {
+    testTasks[i] = &fakeTask{}
+  }
+  e := tasks.Start(tasks.SeriesTasks(testTasks...))
+  <-e.Done()
+  for i, atask := range testTasks {
+    ft := atask.(*fakeTask)
+    if !ft.hasRun() {
+      t.Errorf("Expected task %d to be run.", i)
+    }
+  }
+}
+
+func TestSeriesEnded(t *testing.T) {
+  // two tasks
+  testTasks := make([]tasks.Task, 2)
+
+  for i := range testTasks {
+    testTasks[i] = &fakeTask{runDuration: time.Hour}
+  }
+  e := tasks.Start(tasks.SeriesTasks(testTasks...))
+  e.End()
+  <-e.Done()
+
+  // 2nd task should not be reached.
+  for i, atask := range testTasks {
+    ft := atask.(*fakeTask)
+    if i < 1 {
+      if !ft.hasRun() {
+        t.Errorf("Expected task %d to be run.", i)
+      }
+    } else {
+      if ft.hasRun() {
+        t.Errorf("Expected task %d not to be run.", i)
+      }
+    }
+  }
+}
+
+func TestSeriesError(t *testing.T) {
   // three tasks
   testTasks := make([]tasks.Task, 3)
 
@@ -118,32 +194,6 @@ func TestEndTask(t *testing.T) {
   }
 }
 
-func TestEndTaskSeries(t *testing.T) {
-  // two tasks
-  testTasks := make([]tasks.Task, 2)
-
-  for i := range testTasks {
-    testTasks[i] = &fakeTask{runDuration: time.Hour}
-  }
-  e := tasks.Start(tasks.SeriesTasks(testTasks...))
-  e.End()
-  <-e.Done()
-
-  // 2nd task should not be reached.
-  for i, atask := range testTasks {
-    ft := atask.(*fakeTask)
-    if i < 1 {
-      if !ft.hasRun() {
-        t.Errorf("Expected task %d to be run.", i)
-      }
-    } else {
-      if ft.hasRun() {
-        t.Errorf("Expected task %d not to be run.", i)
-      }
-    }
-  }
-}
-
 func TestNoError(t *testing.T) {
   eTask := &fakeTask{}
   e := tasks.Start(eTask)
@@ -188,6 +238,14 @@ func TestRecurring(t *testing.T) {
       kNow.Add(time.Hour),
       kNow.Add(2 * time.Hour),
       kNow.Add(3 * time.Hour))
+}
+
+func TestRecurringEnded(t *testing.T) {
+  tk := &fakeTask{}
+  r := recurring.AtInterval(time.Hour)
+  e := tasks.Start(tasks.RecurringTask(tk, r))
+  e.End()
+  <-e.Done()
 }
 
 func TestRecurringOverrun(t *testing.T) {
