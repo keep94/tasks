@@ -260,7 +260,7 @@ func (se *SimpleExecutor) loop() {
     e := Start(t)
     se.setCurrent(t, e)
 
-    // Tell StartXXX method that we have started
+    // Tell Start method that we have started
     se.taskRetCh <- e
 
     t = nil

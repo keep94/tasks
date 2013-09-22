@@ -9,6 +9,7 @@ import (
   "errors"
   "github.com/keep94/tasks"
   "github.com/keep94/tasks/recurring"
+  "sync"
   "testing"
   "time"
 )
@@ -255,6 +256,29 @@ func TestSimpleExecutorForceStart(t *testing.T) {
   <-e3.Done()
   if !task1.hasRun() || !task2.hasRun() || !task3.hasRun() {
     t.Error("All three tasks should have run.")
+  }
+}
+
+func TestSimpleExecutorMultiThread(t *testing.T) {
+  fakeTasks := make([]*fakeTask, 20)
+  for i := range fakeTasks {
+    fakeTasks[i] = &fakeTask{}
+  }
+  var wg sync.WaitGroup
+  wg.Add(len(fakeTasks))
+  se := tasks.NewSimpleExecutor()
+  for i := range fakeTasks {
+    go func(t tasks.Task) {
+      e := se.Start(t)
+      <-e.Done()
+      wg.Done()
+    }(fakeTasks[i])
+  }
+  wg.Wait()
+  for i := range fakeTasks {
+    if fakeTasks[i].timesRun != 1 {
+      t.Error("Expected each task to be run exactly once.")
+    }
   }
 }
 
