@@ -213,50 +213,25 @@ type SimpleExecutor struct {
   execution *Execution
   taskCh chan Task
   taskRetCh chan *Execution
-  forceCh chan Task
-  forceRetCh chan *Execution
 }
 
 // NewSimpleExecutor returns a new SimpleExecutor.
 func NewSimpleExecutor() *SimpleExecutor {
   result := &SimpleExecutor{
-      taskCh: make(chan Task),
-      forceCh: make(chan Task),
-      taskRetCh: make(chan *Execution),
-      forceRetCh: make(chan *Execution)}
+      taskCh: make(chan Task), taskRetCh: make(chan *Execution)}
   go result.loop()
   return result
 }
 
-// Start runs task t and returns its Execution. Start blocks until this
-// instance actually starts t. If there is a task already running, it is
-// allowed to complete.
+// Start starts task t and returns its Execution. Start blocks until this
+// instance actually starts t. Start interrupts any currently running task
+// before starting t.
 func (se *SimpleExecutor) Start(t Task) *Execution {
+  if t == nil {
+    panic("Got a nil task.")
+  }
   se.taskCh <- t
   return <-se.taskRetCh
-}
-
-// MaybeStart works like Start except if this instance is already running a
-// task, it returns nil without blocking. Otherwise it blocks until t is
-// actually started.
-func (se *SimpleExecutor) MaybeStart(t Task) *Execution {
-  _, e := se.Current()
-
-  // If a task is running, return nil immediately.
-  if e != nil && !e.IsDone() {
-    return nil
-  }
-
-  // Use ForceStart to interrupt any task that may have started since our
-  // check above because MaybeStart should not block for a long time.
-  return se.ForceStart(t)
-}
-
-// ForceStart works like Start except that it interrupts any current running
-// task instead of waiting until the current task finishes.
-func (se *SimpleExecutor) ForceStart(t Task) *Execution {
-  se.forceCh <- t
-  return <-se.forceRetCh
 }
 
 // Current returns the current running task and its execution. If no task
@@ -276,34 +251,23 @@ func (se *SimpleExecutor) setCurrent(t Task, e *Execution) {
 
 func (se *SimpleExecutor) loop() {
   var t Task  // The task to be run
-  var forced bool  // Whether or not task to be run was forced
   for {
-    // If there is not a forced task to run, block until there is a task to
-    // run.
-    if !forced {
-      select {
-        case t = <-se.taskCh:
-        case t = <-se.forceCh:
-          forced = true
-      }
+    // If we don't already have a task to run, wait until we get one.
+    if t == nil {
+      t = <-se.taskCh
     }
     // Start task
     e := Start(t)
     se.setCurrent(t, e)
 
     // Tell StartXXX method that we have started
-    if forced {
-      se.forceRetCh <- e
-    } else {
-      se.taskRetCh <- e
-    }
+    se.taskRetCh <- e
 
-    forced = false
-    // Block until current task done or until there is a forced task to run
+    t = nil
+    // Block until current task done or until there is a new task to run
     select {
       case <-e.Done():
-      case t = <-se.forceCh:
-        forced = true
+      case t = <-se.taskCh:
         e.End()
         <-e.Done()
     }
@@ -311,45 +275,6 @@ func (se *SimpleExecutor) loop() {
   }
 }
 
-// SameTaskExecutor executes the same task.
-type SameTaskExecutor struct {
-  se *SimpleExecutor
-  t Task
-}
-
-// NewSameTaskExecutor returns a SameTaskExecutor for Task t.
-func NewSameTaskExecutor(t Task) *SameTaskExecutor {
-  return &SameTaskExecutor {se: NewSimpleExecutor(), t: t}
-}
-
-// Task returns this instance's task.
-func (ste *SameTaskExecutor) Task() Task {
-  return ste.t
-}
-
-// Start starts this instance's task and blocks until the task is started.
-func (ste *SameTaskExecutor) Start() *Execution {
-  return ste.se.MaybeStart(ste.t)
-}
-
-// Stop stops this instance's task and blocks until it is stopped.
-func (ste *SameTaskExecutor) Stop() {
-  _, e := ste.se.Current()
-  if e != nil {
-    e.End()
-    <-e.Done()
-  }
-}
-
-// IsRunning returns true if this instance's task is running.
-func (ste *SameTaskExecutor) IsRunning() bool {
-  _, e := ste.se.Current()
-  if e == nil {
-    return false
-  }
-  return !e.IsDone()
-}
-    
 type recurringTask struct {
   t Task
   r recurring.R

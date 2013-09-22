@@ -213,79 +213,42 @@ func TestRecurringError(t *testing.T) {
 }
 
 func TestSimpleExecutorStart(t *testing.T) {
-  task1 := &fakeTask{runDuration: time.Second, message: "task 1"}
-  task2 := &fakeTask{runDuration: time.Second, message: "task 2"}
-  task3 := &fakeTask{runDuration: time.Second, message: "task 3"}
+  task1 := &fakeTask{runDuration: time.Millisecond}
+  task2 := &fakeTask{runDuration: time.Millisecond}
+  task3 := &fakeTask{runDuration: time.Millisecond}
   se := tasks.NewSimpleExecutor()
-  now := time.Now()
-  se.Start(task1)
-  if tk, _ := se.Current(); tk.(*fakeTask).message != "task 1" {
+  e := se.Start(task1)
+  if tk, ex := se.Current(); tk.(*fakeTask) != task1 || ex != e {
     t.Error("Expect Current to be task 1.")
   }
-  se.Start(task2)
-  if tk, _ := se.Current(); tk.(*fakeTask).message != "task 2" {
+  <-e.Done()
+  e = se.Start(task2)
+  if tk, ex := se.Current(); tk.(*fakeTask) != task2 || ex != e {
     t.Error("Expect Current to be task 2.")
   }
-  e := se.Start(task3)
-  if tk, _ := se.Current(); tk.(*fakeTask).message != "task 3" {
+  <-e.Done()
+  e = se.Start(task3)
+  if tk, ex := se.Current(); tk.(*fakeTask) != task3 ||  ex != e {
     t.Error("Expect Current to be task 3.")
   }
   <-e.Done()
-  elapsed := time.Now().Sub(now)
-  if elapsed < 3 * time.Second {
-    t.Error("Tasks should have been run one at a time.")
+  time.Sleep(time.Millisecond)
+  if tk, ex := se.Current(); tk != nil || ex != nil {
+    t.Error("Expected current task and execution to be nil.")
   }
   if !task1.hasRun() || !task2.hasRun() || !task3.hasRun() {
     t.Error("All three tasks should have run.")
   }
 }
 
-func TestSimpleExecutorStart2(t *testing.T) {
+func TestSimpleExecutorForceStart(t *testing.T) {
   task1 := &fakeTask{runDuration: time.Hour}
   task2 := &fakeTask{runDuration: time.Hour}
   task3 := &fakeTask{runDuration: time.Hour}
   se := tasks.NewSimpleExecutor()
-  e := se.Start(task1)
-  e.End()
-  <-e.Done()
-  e = se.Start(task2)
-  e.End()
-  <-e.Done()
-  e = se.Start(task3)
-  e.End()
-  <-e.Done()
-  if !task1.hasRun() || !task2.hasRun() || !task3.hasRun() {
-    t.Error("All three tasks should have run.")
-  }
-}
-
-func TestSimpleExecutorMaybeStart(t *testing.T) {
-  task1 := &fakeTask{runDuration: time.Hour}
-  task2 := &fakeTask{runDuration: time.Hour}
-  task3 := &fakeTask{runDuration: time.Hour}
-  se := tasks.NewSimpleExecutor()
-  e := se.MaybeStart(task1)
-  if ex := se.MaybeStart(task2); ex != nil {
-    t.Error("Expected MaybeStart to return nil.")
-  }
-  e.End()
-  <-e.Done()
-  e = se.MaybeStart(task3)
-  e.End()
-  <-e.Done()
-  if !task1.hasRun() || task2.hasRun() || !task3.hasRun() {
-    t.Error("Only first and third task should have run.")
-  }
-}
-
-func TestForceStart(t *testing.T) {
-  task1 := &fakeTask{runDuration: time.Hour}
-  task2 := &fakeTask{runDuration: time.Hour}
-  task3 := &fakeTask{runDuration: time.Hour}
-  se := tasks.NewSimpleExecutor()
-  e1 := se.ForceStart(task1)
-  e2 := se.ForceStart(task2)
-  e3 := se.ForceStart(task3)
+  e1 := se.Start(task1)
+  e2 := se.Start(task2)
+  e3 := se.Start(task3)
   e3.End()
   <-e1.Done()
   <-e2.Done()
