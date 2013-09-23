@@ -39,6 +39,7 @@ type Clock interface {
 }
 
 // Execution represents a particular execution of some task.
+// Execution instances are safe to use with multiple goroutines.
 type Execution struct {
   Clock
   ended chan struct{}
@@ -206,7 +207,8 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
   return result
 }
 
-// SimpleExecutor executes tasks one at a time.
+// SimpleExecutor executes tasks one at a time. SimpleExecutor instances are
+// safe to use with multiple goroutines.
 type SimpleExecutor struct {
   lock sync.Mutex
   task Task
