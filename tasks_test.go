@@ -271,11 +271,11 @@ func TestRecurringError(t *testing.T) {
       kNow.Add(time.Hour))
 }
 
-func TestSimpleExecutorStart(t *testing.T) {
+func TestSingleExecutorStart(t *testing.T) {
   task1 := &fakeTask{runDuration: time.Millisecond}
   task2 := &fakeTask{runDuration: time.Millisecond}
   task3 := &fakeTask{runDuration: time.Millisecond}
-  se := tasks.NewSimpleExecutor()
+  se := tasks.NewSingleExecutor()
   defer se.Close()
   e := se.Start(task1)
   if tk, ex := se.Current(); tk.(*fakeTask) != task1 || ex != e {
@@ -301,11 +301,11 @@ func TestSimpleExecutorStart(t *testing.T) {
   }
 }
 
-func TestSimpleExecutorForceStart(t *testing.T) {
+func TestSingleExecutorForceStart(t *testing.T) {
   task1 := &fakeTask{runDuration: time.Hour}
   task2 := &fakeTask{runDuration: time.Hour}
   task3 := &fakeTask{runDuration: time.Hour}
-  se := tasks.NewSimpleExecutor()
+  se := tasks.NewSingleExecutor()
   defer se.Close()
   e1 := se.Start(task1)
   e2 := se.Start(task2)
@@ -319,14 +319,14 @@ func TestSimpleExecutorForceStart(t *testing.T) {
   }
 }
 
-func TestSimpleExecutorMultiThread(t *testing.T) {
+func TestSingleExecutorMultiThread(t *testing.T) {
   fakeTasks := make([]*fakeTask, 20)
   for i := range fakeTasks {
     fakeTasks[i] = &fakeTask{}
   }
   var wg sync.WaitGroup
   wg.Add(len(fakeTasks))
-  se := tasks.NewSimpleExecutor()
+  se := tasks.NewSingleExecutor()
   defer se.Close()
   for i := range fakeTasks {
     go func(t tasks.Task) {
@@ -343,9 +343,9 @@ func TestSimpleExecutorMultiThread(t *testing.T) {
   }
 }
 
-func TestSimpleExecutorClose(t *testing.T) {
+func TestSingleExecutorClose(t *testing.T) {
   task1 := &fakeTask{runDuration: time.Hour}
-  se := tasks.NewSimpleExecutor()
+  se := tasks.NewSingleExecutor()
   e := se.Start(task1)
   se.Close()
   <-e.Done()

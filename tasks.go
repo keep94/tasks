@@ -207,9 +207,9 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
   return result
 }
 
-// SimpleExecutor executes tasks one at a time. SimpleExecutor instances are
+// SingleExecutor executes tasks one at a time. SingleExecutor instances are
 // safe to use with multiple goroutines.
-type SimpleExecutor struct {
+type SingleExecutor struct {
   lock sync.Mutex
   task Task
   execution *Execution
@@ -217,9 +217,9 @@ type SimpleExecutor struct {
   taskRetCh chan *Execution
 }
 
-// NewSimpleExecutor returns a new SimpleExecutor.
-func NewSimpleExecutor() *SimpleExecutor {
-  result := &SimpleExecutor{
+// NewSingleExecutor returns a new SingleExecutor.
+func NewSingleExecutor() *SingleExecutor {
+  result := &SingleExecutor{
       taskCh: make(chan Task), taskRetCh: make(chan *Execution)}
   go result.loop()
   return result
@@ -228,7 +228,7 @@ func NewSimpleExecutor() *SimpleExecutor {
 // Start starts task t and returns its Execution. Start blocks until this
 // instance actually starts t. Start interrupts any currently running task
 // before starting t.
-func (se *SimpleExecutor) Start(t Task) *Execution {
+func (se *SingleExecutor) Start(t Task) *Execution {
   if t == nil {
     panic("Got a nil task.")
   }
@@ -239,7 +239,7 @@ func (se *SimpleExecutor) Start(t Task) *Execution {
 // Current returns the current running task and its execution. If no task
 // is running, Current may return nil, nil or it may return the last run
 // task along with its execution.
-func (se *SimpleExecutor) Current() (Task, *Execution) {
+func (se *SingleExecutor) Current() (Task, *Execution) {
   se.lock.Lock()
   defer se.lock.Unlock()
   return se.task, se.execution
@@ -247,18 +247,18 @@ func (se *SimpleExecutor) Current() (Task, *Execution) {
 
 // Close frees the resources of this instance and always returns nil. Close
 // interrupts any currently running task.
-func (se *SimpleExecutor) Close() error {
+func (se *SingleExecutor) Close() error {
   close(se.taskCh)
   return nil
 }
 
-func (se *SimpleExecutor) setCurrent(t Task, e *Execution) {
+func (se *SingleExecutor) setCurrent(t Task, e *Execution) {
   se.lock.Lock()
   defer se.lock.Unlock()
   se.task, se.execution = t, e
 }
 
-func (se *SimpleExecutor) loop() {
+func (se *SingleExecutor) loop() {
   var t Task  // The task to be run
   for {
     // If we don't already have a task to run, wait until we get one.
