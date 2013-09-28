@@ -28,6 +28,14 @@ const (
   Weedend = Saturday | Sunday
 )
 
+var (
+  kOnTheHour = RFunc(func(t time.Time) functional.Stream {
+    t = time.Date(
+        t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location())
+    return &intervalStream{t: t.Add(time.Hour), d: time.Hour}
+  })
+)
+
 // R represents a recurring time such as each Monday at 7:00.
 type R interface {
 
@@ -103,6 +111,12 @@ func AtInterval(d time.Duration) R {
   return RFunc(func(t time.Time) functional.Stream {
     return &intervalStream{t: t.Add(d), d: d}
   })
+}
+
+// OnTheHour returns an R instance that represents repeating at the start of
+// each hour.
+func OnTheHour() R {
+  return kOnTheHour
 }
   
 // AtTime returns a new R instance that represents repeating at a

@@ -99,6 +99,17 @@ func TestAtInterval(t *testing.T) {
       kNow.Add(3 * time.Hour))
 }
 
+func TestOnTheHour(t *testing.T) {
+  r := recurring.FirstN(recurring.OnTheHour(), 3)
+  firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,
+      firstTime.Add(time.Hour),
+      firstTime.Add(2 * time.Hour))
+}
+
 func TestCombine(t *testing.T) {
   r := recurring.Combine(
       recurring.FirstN(recurring.AtInterval(2 * time.Hour), 4),
