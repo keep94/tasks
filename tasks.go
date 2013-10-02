@@ -129,7 +129,7 @@ func (e *Execution) IsEnded() bool {
   return false
 }
 
-// Sleep sleeps for the specified duration ends or until this execution should
+// Sleep sleeps for the specified duration or until this execution should
 // end, whichever comes first. Sleep returns true if it slept the entire
 // duration or false if it returned early because this execution should end.
 func (e *Execution) Sleep(d time.Duration) bool {
