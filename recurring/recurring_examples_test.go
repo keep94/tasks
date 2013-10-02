@@ -16,7 +16,7 @@ func ExampleFilter() {
   r := recurring.Filter(
       recurring.AtTime(7, 0),
       recurring.OnDays(recurring.Weekdays))
-  stream := r.ForTime(time.Date(2013, 10, 2, 6, 0, 0, 0, time.Local))
+  stream := r.ForTime(time.Date(2013, 10, 1, 7, 0, 0, 0, time.Local))
   layout := "Mon Jan 2 15:04:05"
   var current time.Time
   for i := 0; i < 5; i++ {
