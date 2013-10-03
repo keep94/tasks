@@ -3,8 +3,7 @@
 // license that can be found in the LICENSE file or
 // at http://opensource.org/licenses/BSD-3-Clause.
 
-// Package recurring contains implementations of the the Recurring interface
-// in the tasks package.
+// Package recurring handles recurring times.
 package recurring
 
 import (
