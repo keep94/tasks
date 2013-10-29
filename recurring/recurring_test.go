@@ -17,23 +17,23 @@ var (
 )
 
 func TestAtTime(t *testing.T) {
-  r := recurring.FirstN(recurring.AtTime(17, 21), 3)
   firstTime := time.Date(2013, 9, 13, 17, 21, 0, 0, time.Local)
+  r := recurring.Until(recurring.AtTime(17, 21), firstTime.AddDate(0, 0, 3))
   verifyTimes(
       t,
       r.ForTime(kNow),
       firstTime,
-      firstTime.Add(24 * time.Hour),
-      firstTime.Add(48 * time.Hour))
+      firstTime.AddDate(0, 0, 1),
+      firstTime.AddDate(0, 0, 2))
 
-  r = recurring.FirstN(recurring.AtTime(17, 22), 3)
   firstTime = time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
+  r = recurring.Until(recurring.AtTime(17, 22), firstTime.AddDate(0, 0, 3))
   verifyTimes(
       t,
       r.ForTime(kNow),
       firstTime,
-      firstTime.Add(24 * time.Hour),
-      firstTime.Add(48 * time.Hour))
+      firstTime.AddDate(0, 0, 1),
+      firstTime.AddDate(0, 0, 2))
 }
 
 func TestOnDate(t *testing.T) {
@@ -52,12 +52,12 @@ func TestOnDate(t *testing.T) {
 }
 
 func TestOnDays(t *testing.T) {
-  r := recurring.FirstN(
+  firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+  r := recurring.Until(
       recurring.Filter(
           recurring.AtTime(18, 0),
           recurring.OnDays(recurring.Weekdays)),
-      6)
-  firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+      firstTime.AddDate(0, 0, 8))
   verifyTimes(
       t,
       r.ForTime(kNow),
@@ -70,38 +70,65 @@ func TestOnDays(t *testing.T) {
 }
     
 func TestAfter(t *testing.T) {
-  r := recurring.FirstN(recurring.AtTime(14, 22), 2)
-  r = recurring.After(r, 3 * time.Hour)
   firstTime := time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
+  r := recurring.Until(
+      recurring.After(recurring.AtTime(14, 22), 3 * time.Hour),
+      firstTime.AddDate(0, 0, 2))
   verifyTimes(
       t,
       r.ForTime(kNow),
       firstTime,
-      firstTime.Add(24 * time.Hour))
-
-  r = recurring.FirstN(recurring.AtTime(14, 21), 2)
-  r = recurring.After(r, 3 * time.Hour)
+      firstTime.AddDate(0, 0, 1))
   firstTime = time.Date(2013, 9, 13, 17, 21, 0, 0, time.Local)
+  r = recurring.Until(
+      recurring.After(recurring.AtTime(14, 21), 3 * time.Hour),
+      firstTime.AddDate(0, 0, 2))
   verifyTimes(
       t,
       r.ForTime(kNow),
       firstTime,
-      firstTime.Add(24 * time.Hour))
+      firstTime.AddDate(0, 0, 1))
 }
 
 func TestAtInterval(t *testing.T) {
-  r := recurring.FirstN(recurring.AtInterval(time.Hour), 3)
+  r := recurring.Until(
+      recurring.AtInterval(kNow, time.Hour), kNow.Add(4 * time.Hour))
   verifyTimes(
       t,
       r.ForTime(kNow),
       kNow.Add(time.Hour),
       kNow.Add(2 * time.Hour),
       kNow.Add(3 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow.Add(-1 * time.Second)),
+      kNow,
+      kNow.Add(time.Hour),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow.Add(-2 * time.Hour)),
+      kNow,
+      kNow.Add(time.Hour),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow.Add(time.Hour)),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
+  verifyTimes(
+      t,
+      r.ForTime(kNow.Add(59 * time.Minute)),
+      kNow.Add(time.Hour),
+      kNow.Add(2 * time.Hour),
+      kNow.Add(3 * time.Hour))
 }
 
 func TestOnTheHour(t *testing.T) {
-  r := recurring.FirstN(recurring.OnTheHour(), 3)
   firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+  r := recurring.Until(recurring.OnTheHour(), firstTime.Add(3 * time.Hour))
   verifyTimes(
       t,
       r.ForTime(kNow),
@@ -112,8 +139,10 @@ func TestOnTheHour(t *testing.T) {
 
 func TestCombine(t *testing.T) {
   r := recurring.Combine(
-      recurring.FirstN(recurring.AtInterval(2 * time.Hour), 4),
-      recurring.FirstN(recurring.AtInterval(3 * time.Hour), 4))
+      recurring.Until(
+          recurring.AtInterval(kNow, 2 * time.Hour), kNow.Add(10 * time.Hour)),
+      recurring.Until(
+          recurring.AtInterval(kNow, 3 * time.Hour), kNow.Add(15 * time.Hour)))
   verifyTimes(
       t,
       r.ForTime(kNow),
@@ -128,8 +157,10 @@ func TestCombine(t *testing.T) {
 
 func TestCombine2(t *testing.T) {
   r := recurring.Combine(
-      recurring.FirstN(recurring.AtInterval(2 * time.Hour), 0),
-      recurring.FirstN(recurring.AtInterval(3 * time.Hour), 0))
+      recurring.Until(
+          recurring.AtInterval(kNow, 2 * time.Hour), kNow.Add(2 * time.Hour)),
+      recurring.Until(
+          recurring.AtInterval(kNow, 3 * time.Hour), kNow.Add(3 * time.Hour)))
   verifyTimes(
       t,
       r.ForTime(kNow))
@@ -137,8 +168,9 @@ func TestCombine2(t *testing.T) {
 
 func TestCombine3(t *testing.T) {
   r := recurring.Combine(
-      recurring.FirstN(recurring.AtInterval(2 * time.Hour), 0),
-      recurring.FirstN(recurring.AtInterval(3 * time.Hour), 2))
+      recurring.Until(recurring.AtInterval(kNow, 2 * time.Hour), kNow),
+      recurring.Until(
+          recurring.AtInterval(kNow, 3 * time.Hour), kNow.Add(9 * time.Hour)))
   verifyTimes(
       t,
       r.ForTime(kNow),
@@ -146,6 +178,24 @@ func TestCombine3(t *testing.T) {
       kNow.Add(6 * time.Hour))
 }
 
+func TestDrPepper(t *testing.T) {
+  r := recurring.Until(
+      recurring.Combine(
+          recurring.AtTime(10, 0),
+          recurring.AtTime(14, 0),
+          recurring.AtTime(16, 0)),
+      kNow.AddDate(0, 0, 2))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      time.Date(2013, 9, 13, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 9, 13, 14, 0, 0, 0, time.Local),
+      time.Date(2013, 9, 13, 16, 0, 0, 0, time.Local),
+      time.Date(2013, 9, 14, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 9, 14, 14, 0, 0, 0, time.Local),
+      time.Date(2013, 9, 14, 16, 0, 0, 0, time.Local))
+}
+      
 func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) {
   var actual time.Time
   for _, expected := range expectedTimes {

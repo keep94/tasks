@@ -62,18 +62,10 @@ func Combine(rs ...R) R {
   })
 }
 
-// Modify returns a new R instance that uses f to modify the time.Time
-// Streams that r creates.
-func Modify(r R, f func(s functional.Stream) functional.Stream) R {
-  return RFunc(func(t time.Time) functional.Stream {
-    return f(r.ForTime(t))
-  })
-}
-
 // Filter returns a new R instance that filters the time.Time Streams
 // that r creates
 func Filter(r R, f functional.Filterer) R {
-  return Modify(
+  return modify(
       r,
       func(s functional.Stream) functional.Stream {
         return functional.Filter(f, s)
@@ -94,21 +86,32 @@ func After(r R, d time.Duration) R {
   })
 }
 
-// FirstN returns a new R instance that generates only the first N
-// times that r generates.
-func FirstN(r R, n int) R {
-  return Modify(
+// Until returns a new R that is the same as r but contains only times before t.
+func Until(r R, t time.Time) R {
+  return modify(
       r,
       func(s functional.Stream) functional.Stream {
-        return functional.Slice(s, 0, n)
+        return functional.TakeWhile(
+            functional.NewFilterer(func(ptr interface{}) error {
+              p := ptr.(*time.Time)
+              if p.Before(t) {
+                return nil
+              }
+              return functional.Skipped
+            }),
+            s)
       })
 }
 
-// AtInterval returns a new R instance that represents repeating
-// at d intervals.
-func AtInterval(d time.Duration) R {
+// AtInterval returns a new R instance that represents starting at time
+// start and repeating at d intervals.
+func AtInterval(start time.Time, d time.Duration) R {
   return RFunc(func(t time.Time) functional.Stream {
-    return &intervalStream{t: t.Add(d), d: d}
+    if t.Before(start) {
+      return &intervalStream{t: start, d: d}
+    }
+    durationCount := t.Sub(start) / d + 1
+    return &intervalStream{t: start.Add(durationCount * d), d: d}
   })
 }
 
@@ -151,6 +154,12 @@ func OnDays(dayMask int) functional.Filterer {
       return nil
     }
     return functional.Skipped
+  })
+}
+
+func modify(r R, f func(s functional.Stream) functional.Stream) R {
+  return RFunc(func(t time.Time) functional.Stream {
+    return f(r.ForTime(t))
   })
 }
 

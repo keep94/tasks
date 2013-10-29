@@ -228,9 +228,8 @@ func TestError2(t *testing.T) {
 
 func TestRecurring(t *testing.T) {
   timeTask := &fakeTask{}
-  r := recurring.FirstN(
-      recurring.AtInterval(time.Hour),
-      3)
+  r := recurring.Until(
+      recurring.AtInterval(kNow, time.Hour), kNow.Add(4 * time.Hour))
   tasks.RunForTesting(
       tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
   verifyTimes(
@@ -242,7 +241,7 @@ func TestRecurring(t *testing.T) {
 
 func TestRecurringEnded(t *testing.T) {
   tk := &fakeTask{}
-  r := recurring.AtInterval(time.Hour)
+  r := recurring.AtInterval(kNow, time.Hour)
   e := tasks.Start(tasks.RecurringTask(tk, r))
   e.End()
   <-e.Done()
@@ -250,9 +249,8 @@ func TestRecurringEnded(t *testing.T) {
 
 func TestRecurringOverrun(t *testing.T) {
   timeTask := &fakeTask{runDuration: time.Hour}
-  r := recurring.FirstN(
-      recurring.AtInterval(time.Hour),
-      3)
+  r := recurring.Until(
+      recurring.AtInterval(kNow, time.Hour), kNow.Add(5 * time.Hour))
   tasks.RunForTesting(
       tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
   verifyTimes(
@@ -261,9 +259,7 @@ func TestRecurringOverrun(t *testing.T) {
 
 func TestRecurringError(t *testing.T) {
   timeTask := &fakeTask{err: kSomeError}
-  r := recurring.FirstN(
-      recurring.AtInterval(time.Hour),
-      3)
+  r := recurring.AtInterval(kNow, time.Hour)
   tasks.RunForTesting(
       tasks.RecurringTask(timeTask, r), &tasks.ClockForTesting{kNow})
   verifyTimes(
