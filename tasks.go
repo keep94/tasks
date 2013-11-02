@@ -210,86 +210,164 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
 // SingleExecutor executes tasks one at a time. SingleExecutor instances are
 // safe to use with multiple goroutines.
 type SingleExecutor struct {
-  lock sync.Mutex
-  task Task
-  execution *Execution
-  taskCh chan Task
-  taskRetCh chan *Execution
+  me *MultiExecutor
 }
 
 // NewSingleExecutor returns a new SingleExecutor.
 func NewSingleExecutor() *SingleExecutor {
-  result := &SingleExecutor{
-      taskCh: make(chan Task), taskRetCh: make(chan *Execution)}
-  go result.loop()
-  return result
+  return &SingleExecutor{NewMultiExecutor(&singleTaskCollection{})}
 }
 
 // Start starts task t and returns its Execution. Start blocks until this
 // instance actually starts t. Start interrupts any currently running task
 // before starting t.
 func (se *SingleExecutor) Start(t Task) *Execution {
-  if t == nil {
-    panic("Got a nil task.")
-  }
-  se.taskCh <- t
-  return <-se.taskRetCh
+  return se.me.Start(t)
 }
 
 // Current returns the current running task and its execution. If no task
 // is running, Current may return nil, nil or it may return the last run
 // task along with its execution.
 func (se *SingleExecutor) Current() (Task, *Execution) {
-  se.lock.Lock()
-  defer se.lock.Unlock()
-  return se.task, se.execution
+  return se.me.Tasks().(*singleTaskCollection).Current()
 }
 
 // Close frees the resources of this instance and always returns nil. Close
 // interrupts any currently running task.
 func (se *SingleExecutor) Close() error {
-  close(se.taskCh)
+  return se.me.Close()
+}
+
+// Interface TaskCollection represents a collection of running tasks.
+type TaskCollection interface {
+  // Add adds a task and execution of that task to this collection.
+  Add(t Task, e *Execution)
+
+  // Remove removes task t from this collection.
+  Remove(t Task)
+
+  // Conflicts returns the execution of all tasks that conflict with t.
+  // If t is nil it means return the executions of all tasks in this
+  // collection.
+  Conflicts(t Task) []*Execution
+}
+
+// MultiExecutor executes multiple tasks at one time while ensuring that no
+// conflicting tasks execute in parallel.
+// MultiExecutor is safe to use with multiple goroutines.
+type MultiExecutor struct {
+  tc TaskCollection
+  taskCh chan Task
+  taskRetCh chan *Execution
+}
+  
+// NewMultiExecutor returns a new MultiExecutor. tc is the TaskCollection that
+// will hold running tasks. tc shall be safe to use with multiple goroutines
+// and each MultiExecutor shall have its own TaskCollection instance.
+func NewMultiExecutor(tc TaskCollection) *MultiExecutor {
+  result := &MultiExecutor{
+      tc: tc,
+      taskCh: make(chan Task),
+      taskRetCh: make(chan *Execution)}
+  go result.loop()
+  return result
+}
+
+// Start starts task t and returns its Execution. Start blocks until this
+// instance actually starts t. Start interrupts any currently running 
+// conflicting tasks before starting t.
+func (me *MultiExecutor) Start(t Task) *Execution {
+  if t == nil {
+    panic("Got a nil task.")
+  }
+  me.taskCh <- t
+  return <-me.taskRetCh
+}
+
+// Tasks returns the running tasks.
+func (me *MultiExecutor) Tasks() TaskCollection {
+  return me.tc
+}
+
+// Close frees the resources of this instance and always returns nil. Close
+// interrupts any currently running tasks.
+func (me *MultiExecutor) Close() error {
+  close(me.taskCh)
+  for _, e := range me.tc.Conflicts(nil) {
+    e.End()
+    <-e.Done()
+  }
   return nil
 }
 
-func (se *SingleExecutor) setCurrent(t Task, e *Execution) {
-  se.lock.Lock()
-  defer se.lock.Unlock()
-  se.task, se.execution = t, e
-}
-
-func (se *SingleExecutor) loop() {
-  var t Task  // The task to be run
+func (me *MultiExecutor) loop() {
   for {
-    // If we don't already have a task to run, wait until we get one.
-    if t == nil {
-      t = <-se.taskCh
-      if t == nil {  // Our taskCh has been closed.
-        close(se.taskRetCh)
-        return
-      }
+    // Get the next task from the Start method.
+    t := <-me.taskCh
+    if t == nil {  // Our taskCh has been closed.
+      close(me.taskRetCh)
+      return
     }
-    // Start task
-    e := Start(t)
-    se.setCurrent(t, e)
+
+    // Interrupt the conflicting tasks and wait for them to end.
+    for _, e := range me.tc.Conflicts(t) {
+      e.End()
+      <-e.Done()
+    }
+
+    // Start executing our task taking care to remove it from the collection
+    // of running tasks when it completes.
+    exec := Start(TaskFunc(func(e *Execution) {
+      t.Do(e)
+      me.tc.Remove(t)
+    }))
+
+    // Add our newly running task to the collection of running tasks.
+    me.tc.Add(t, exec)
 
     // Tell Start method that we have started
-    se.taskRetCh <- e
-
-    t = nil
-    // Block until current task done or until there is a new task to run
-    select {
-      case <-e.Done():
-      case t = <-se.taskCh:
-        e.End()
-        <-e.Done()
-        if t == nil {  // Our taskCh has been closed.
-          close(se.taskRetCh)
-          return
-        }
-    }
-    se.setCurrent(nil, nil)
+    me.taskRetCh <- exec
   }
+}
+
+type singleTaskCollection struct {
+  mutex sync.Mutex
+  t Task
+  e *Execution
+}
+
+func (stc *singleTaskCollection) Add(t Task, e *Execution) {
+  stc.mutex.Lock()
+  defer stc.mutex.Unlock()
+  if stc.t != nil || stc.e != nil {
+    panic("Trying to add a task to a full singleTaskCollection.")
+  }
+  stc.t = t
+  stc.e = e
+}
+
+func (stc *singleTaskCollection) Remove(t Task) {
+  stc.mutex.Lock()
+  defer stc.mutex.Unlock()
+  if stc.t == t {
+    stc.t = nil
+    stc.e = nil
+  }
+}
+
+func (stc *singleTaskCollection) Conflicts(t Task) []*Execution {
+  stc.mutex.Lock()
+  defer stc.mutex.Unlock()
+  if stc.e == nil {
+    return nil
+  }
+  return []*Execution{stc.e}
+}
+
+func (stc *singleTaskCollection) Current() (Task, *Execution) {
+  stc.mutex.Lock()
+  defer stc.mutex.Unlock()
+  return stc.t, stc.e
 }
 
 type recurringTask struct {
