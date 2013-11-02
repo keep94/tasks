@@ -239,6 +239,9 @@ func (se *SingleExecutor) Close() error {
 }
 
 // Interface TaskCollection represents a collection of running tasks.
+// The methods in this interface are for MultiExecutor only. Clients must not
+// call these methods directly. Implementations of this interface can provide
+// methods giving clients a read-only view of running tasks and executions.
 type TaskCollection interface {
   // Add adds a task and execution of that task to this collection.
   Add(t Task, e *Execution)
