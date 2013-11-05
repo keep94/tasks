@@ -209,33 +209,31 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
 
 // SingleExecutor executes tasks one at a time. SingleExecutor instances are
 // safe to use with multiple goroutines.
-type SingleExecutor struct {
-  me *MultiExecutor
-}
+type SingleExecutor MultiExecutor
 
 // NewSingleExecutor returns a new SingleExecutor.
 func NewSingleExecutor() *SingleExecutor {
-  return &SingleExecutor{NewMultiExecutor(&singleTaskCollection{})}
+  return (*SingleExecutor)(NewMultiExecutor(&singleTaskCollection{}))
 }
 
 // Start starts task t and returns its Execution. Start blocks until this
 // instance actually starts t. Start interrupts any currently running task
 // before starting t.
 func (se *SingleExecutor) Start(t Task) *Execution {
-  return se.me.Start(t)
+  return (*MultiExecutor)(se).Start(t)
 }
 
 // Current returns the current running task and its execution. If no task
 // is running, Current may return nil, nil or it may return the last run
 // task along with its execution.
 func (se *SingleExecutor) Current() (Task, *Execution) {
-  return se.me.Tasks().(*singleTaskCollection).Current()
+  return (*MultiExecutor)(se).Tasks().(*singleTaskCollection).Current()
 }
 
 // Close frees the resources of this instance and always returns nil. Close
 // interrupts any currently running task.
 func (se *SingleExecutor) Close() error {
-  return se.me.Close()
+  return (*MultiExecutor)(se).Close()
 }
 
 // Interface TaskCollection represents a collection of running tasks.
