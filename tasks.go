@@ -208,7 +208,9 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
 }
 
 // SingleExecutor executes tasks one at a time. SingleExecutor instances are
-// safe to use with multiple goroutines.
+// safe to use with multiple goroutines. Clients should consider
+// SingleExecutor and MultiExecutor using the same underlying type an
+// implementation detail that could change in the future. 
 type SingleExecutor MultiExecutor
 
 // NewSingleExecutor returns a new SingleExecutor.
