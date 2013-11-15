@@ -296,10 +296,7 @@ func (me *MultiExecutor) Tasks() TaskCollection {
 // interrupts any currently running tasks.
 func (me *MultiExecutor) Close() error {
   close(me.taskCh)
-  for _, e := range me.tc.Conflicts(nil) {
-    e.End()
-    <-e.Done()
-  }
+  interruptAll(me.tc.Conflicts(nil))
   return nil
 }
 
@@ -313,10 +310,7 @@ func (me *MultiExecutor) loop() {
     }
 
     // Interrupt the conflicting tasks and wait for them to end.
-    for _, e := range me.tc.Conflicts(t) {
-      e.End()
-      <-e.Done()
-    }
+    interruptAll(me.tc.Conflicts(t))
 
     // Start executing our task taking care to remove it from the collection
     // of running tasks when it completes.
@@ -450,3 +444,13 @@ func (s systemClock) Now() time.Time {
 func (s systemClock) After(d time.Duration) <-chan time.Time {
   return time.After(d)
 }
+
+func interruptAll(executions []*Execution) {
+  for _, e := range executions {
+    e.End()
+  }
+  for _, e := range executions {
+    <-e.Done()
+  }
+}
+
