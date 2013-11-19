@@ -12,8 +12,10 @@ import (
   "time"
 )
 
+type DaysOfWeek int
+
 const (
-  Sunday = 1<<iota
+  Sunday DaysOfWeek = 1<<iota
   Saturday
   Friday
   Thursday
@@ -146,7 +148,7 @@ func OnDate(targetTime time.Time) R {
 
 // OnDays filters times by day of week. dayMask is the desired days of the
 // week ored together e.g functional.Monday | functional.Tuesday
-func OnDays(dayMask int) functional.Filterer {
+func OnDays(dayMask DaysOfWeek) functional.Filterer {
   return functional.NewFilterer(func(ptr interface{}) error {
     p := ptr.(*time.Time)
     ourWeekday := uint((7 - p.Weekday()) % 7)
