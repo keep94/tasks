@@ -195,6 +195,31 @@ func TestDrPepper(t *testing.T) {
       time.Date(2013, 9, 14, 14, 0, 0, 0, time.Local),
       time.Date(2013, 9, 14, 16, 0, 0, 0, time.Local))
 }
+
+func TestStartAtUntil(t *testing.T) {
+  hourly := recurring.OnTheHour()
+  thanksgiving10 := time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local)
+  thanksgiving10and11 := recurring.Until(
+      recurring.StartAt(hourly, thanksgiving10),
+      thanksgiving10.Add(time.Hour * 2))
+  verifyTimes(
+      t,
+      thanksgiving10and11.ForTime(kNow),
+      time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local))
+  verifyTimes(
+      t,
+      thanksgiving10and11.ForTime(thanksgiving10),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local))
+  thanksgiving11and12 := recurring.Until(
+      recurring.StartAt(hourly, thanksgiving10.Add(time.Nanosecond)),
+      thanksgiving10.Add(time.Nanosecond).Add(time.Hour * 2))
+  verifyTimes(
+      t,
+      thanksgiving11and12.ForTime(kNow),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 12, 0, 0, 0, time.Local))
+}
       
 func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) {
   var actual time.Time

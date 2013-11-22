@@ -88,6 +88,18 @@ func After(r R, d time.Duration) R {
   })
 }
 
+// StartAt returns a new R that is the same as r but contains only the times
+// on or after startTime.
+func StartAt(r R, startTime time.Time) R {
+  startTime = startTime.Add(-1 * time.Nanosecond)
+  return RFunc(func(t time.Time) functional.Stream {
+    if t.Before(startTime) {
+      return r.ForTime(startTime)
+    }
+    return r.ForTime(t)
+  })
+}
+
 // Until returns a new R that is the same as r but contains only times before t.
 func Until(r R, t time.Time) R {
   return modify(
