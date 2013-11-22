@@ -186,7 +186,8 @@ func RepeatingTask(t Task, n int) Task {
 }
 
 // ClockForTesting is a test implementation of Clock.
-// Current time advances only when After() is called.
+// Unlike the real clock, current time remains the same unless client changes
+// it directly or calls After()
 type ClockForTesting struct {
 
   // The current time
@@ -197,7 +198,7 @@ func (c *ClockForTesting) Now() time.Time {
   return c.Current
 }
 
-// After immediately advances current time by d and send that currnet time
+// After immediately advances current time by d and sends that currnet time
 // on the returned channel.
 func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
   c.Current = c.Current.Add(d)
