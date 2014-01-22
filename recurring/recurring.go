@@ -7,7 +7,6 @@
 package recurring
 
 import (
-  "container/heap"
   "github.com/keep94/gofunctional3/functional"
   "time"
 )
@@ -210,94 +209,34 @@ func (n closeDoesNothing) Close() error {
 }
 
 func combineStreams(streams []functional.Stream) functional.Stream {
-  h := make(streamHeap, len(streams))
-  for i := range streams {
-    h[i] = &item{stream: streams[i]}
-    h[i].pop()
-  }
-  heap.Init(&h)
-  return &mergeStream{orig: streams, sh: &h}
+  allTimes := functional.Merge(
+      func() interface{} { return new(time.Time) },
+      nil,
+      func(lhs, rhs interface{}) bool {
+        l := lhs.(*time.Time)
+        r := rhs.(*time.Time)
+        return l.Before(*r)
+      }, 
+      streams...)
+  return &uniqueStream{Stream: allTimes}
 }
 
-type item struct {
-  stream functional.Stream
-  t time.Time
-  e error
-}
-
-func (i *item) pop() {
-  i.e = i.stream.Next(&i.t)
-}
-
-type streamHeap []*item
-
-func (sh streamHeap) Len() int {
-  return len(sh)
-}
-
-func (sh streamHeap) Less(i, j int) bool {
-  if sh[i].e != nil {
-    return sh[j].e == nil
-  }
-  if sh[j].e != nil {
-    return false
-  }
-  return sh[i].t.Before(sh[j].t)
-}
-
-func (sh streamHeap) Swap(i, j int) {
-  sh[i], sh[j] = sh[j], sh[i]
-}
-
-func (sh *streamHeap) Push(x interface{}) {
-  *sh = append(*sh, x.(*item))
-}
-
-func (sh *streamHeap) Pop() interface{} {
-  old := *sh
-  n := len(old)
-  *sh = old[0:n - 1]
-  return old[n - 1]
-}
-
-type mergeStream struct {
-  orig []functional.Stream
-  sh *streamHeap
-  lastEmitted time.Time
+type uniqueStream struct {
+  functional.Stream
+  lastTime time.Time
   started bool
 }
 
-func (s *mergeStream) Next(ptr interface{}) error {
-  for s.sh.Len() > 0 {
-    aitem := heap.Pop(s.sh).(*item)
-    if aitem.e == functional.Done {
+func (s *uniqueStream) Next(ptr interface{}) (err error) {
+  for err = s.Stream.Next(ptr); err == nil; err = s.Stream.Next(ptr) {
+    current := *ptr.(*time.Time)
+    if s.started && current == s.lastTime {
       continue
     }
-    if aitem.e != nil {
-      return aitem.e
-    }
-    if s.started && aitem.t == s.lastEmitted {
-      aitem.pop()
-      heap.Push(s.sh, aitem)
-      continue
-    }
-    p := ptr.(*time.Time)
-    *p = aitem.t
     s.started = true
-    s.lastEmitted = aitem.t
-    aitem.pop()
-    heap.Push(s.sh, aitem)
-    return nil
+    s.lastTime = current
+    return
   }
-  return functional.Done
+  return
 }
-      
-func (s *mergeStream) Close() error {
-  var result error
-  for _, stream := range s.orig {
-    if err := stream.Close(); err != nil {
-      result = err
-    }
-  }
-  return result
-}
+

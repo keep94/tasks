@@ -7,6 +7,7 @@ package tasks_test
 
 import (
   "errors"
+  "github.com/keep94/gofunctional3/functional"
   "github.com/keep94/tasks"
   "github.com/keep94/tasks/recurring"
   "sync"
@@ -239,6 +240,16 @@ func TestRecurring(t *testing.T) {
       kNow.Add(3 * time.Hour))
 }
 
+func TestRecurringCloseStream(t *testing.T) {
+  task := &fakeTask{}
+  r := &testForClose{}
+  tasks.RunForTesting(
+      tasks.RecurringTask(task, r), &tasks.ClockForTesting{kNow})
+  if !r.closeCalled {
+    t.Error("Expected close to be called.")
+  }
+}
+
 func TestRecurringEnded(t *testing.T) {
   tk := &fakeTask{}
   r := recurring.AtInterval(kNow, time.Hour)
@@ -368,6 +379,23 @@ func (ft *fakeTask) Do(e *tasks.Execution) {
 
 func (ft *fakeTask) hasRun() bool {
   return ft.timesRun > 0
+}
+
+type testForClose struct {
+  closeCalled bool
+}
+
+func (r *testForClose) ForTime(t time.Time) functional.Stream {
+  return r
+}
+
+func (r *testForClose) Next(ptr interface{}) error {
+  return functional.Done
+}
+
+func (r *testForClose) Close() error {
+  r.closeCalled = true
+  return nil
 }
 
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
