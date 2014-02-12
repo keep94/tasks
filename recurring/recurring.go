@@ -54,13 +54,20 @@ func (f RFunc) ForTime(t time.Time) functional.Stream {
 // Combine combines multiple R instances together and returns them
 // as a single one.
 func Combine(rs ...R) R {
-  return RFunc(func(t time.Time) functional.Stream {
-    streams := make([]functional.Stream, len(rs))
-    for i := range rs {
-      streams[i] = rs[i].ForTime(t)
-    }
-    return combineStreams(streams)
-  })
+  switch len(rs) {
+    case 0:
+      return nilRecurring{}
+    case 1:
+      return rs[0]
+    default:
+      return RFunc(func(t time.Time) functional.Stream {
+        streams := make([]functional.Stream, len(rs))
+        for i := range rs {
+          streams[i] = rs[i].ForTime(t)
+        }
+        return combineStreams(streams)
+      })
+  }
 }
 
 // Filter returns a new R instance that filters the time.Time Streams
@@ -157,6 +164,12 @@ func OnDate(targetTime time.Time) R {
   })
 }
 
+// Nil returns a new R instance that represents never happening.
+// Nil is draft API and my change in incompatible ways.
+func Nil() R {
+  return nilRecurring{}
+}
+
 // OnDays filters times by day of week. dayMask is the desired days of the
 // week ored together e.g functional.Monday | functional.Tuesday
 func OnDays(dayMask DaysOfWeek) functional.Filterer {
@@ -238,5 +251,12 @@ func (s *uniqueStream) Next(ptr interface{}) (err error) {
     return
   }
   return
+}
+
+type nilRecurring struct {
+}
+
+func (n nilRecurring) ForTime(t time.Time) functional.Stream {
+  return functional.NilStream()
 }
 

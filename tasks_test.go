@@ -71,6 +71,16 @@ func TestParallelError(t *testing.T) {
   }
 }
 
+func TestParallelZeroOrOne(t *testing.T) {
+  task := &fakeTask{}
+  if tasks.ParallelTasks() != tasks.NilTask() {
+    t.Error("Expected zero parallel tasks to be nil task.")
+  }
+  if tasks.ParallelTasks(task) != task {
+    t.Error("Expected one parallel task to be that task.")
+  }
+}
+
 func TestSeries(t *testing.T) {
   // three tasks
   testTasks := make([]tasks.Task, 3)
@@ -145,6 +155,16 @@ func TestSeriesError(t *testing.T) {
   }
 }
 
+func TestSeriesZeroOrOne(t *testing.T) {
+  task := &fakeTask{}
+  if tasks.SeriesTasks() != tasks.NilTask() {
+    t.Error("Expected zero series tasks to be nil task.")
+  }
+  if tasks.SeriesTasks(task) != task {
+    t.Error("Expected one series task to be that task.")
+  }
+}
+
 func TestRepeatingTask(t *testing.T) {
   task := &fakeTask{}
   e := tasks.Start(tasks.RepeatingTask(task, 5))
@@ -170,6 +190,16 @@ func TestRepeatingTaskError(t *testing.T) {
   <-e.Done()
   if task.timesRun != 1 {
     t.Errorf("Expected 1, got %v", task.timesRun)
+  }
+}
+
+func TestRepeatingZeroOrOne(t *testing.T) {
+  task := &fakeTask{}
+  if tasks.RepeatingTask(task, 0) != tasks.NilTask() {
+    t.Error("Expect zero repeating task to be nil task.")
+  }
+  if tasks.RepeatingTask(task, 1) != task {
+    t.Error("Expected one repeating task to be that task.")
   }
 }
 

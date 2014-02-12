@@ -178,6 +178,17 @@ func TestCombine3(t *testing.T) {
       kNow.Add(6 * time.Hour))
 }
 
+func TestCombineZeroOrOne(t *testing.T) {
+  r := intRecurring(5)
+  if recurring.Combine() != recurring.Nil() {
+    t.Error("Expect combining no recurrings to be nil recurring.")
+  }
+  if recurring.Combine(r) != r {
+    t.Error("Expected combine of single recurring to be that recurring.")
+  }
+}
+      
+
 func TestDrPepper(t *testing.T) {
   r := recurring.Until(
       recurring.Combine(
@@ -235,4 +246,10 @@ func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) 
   if s.Next(&actual) != functional.Done {
     t.Error("Stream too long.")
   }
+}
+
+type intRecurring int
+
+func (i intRecurring) ForTime(t time.Time) functional.Stream {
+  return functional.NilStream()
 }

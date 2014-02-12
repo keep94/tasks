@@ -170,19 +170,46 @@ func RecurringTask(t Task, r recurring.R) Task {
 // ParallelTasks returns a task that performs all the passed in tasks in
 // parallel.
 func ParallelTasks(tasks ...Task) Task {
-  return parallelTasks(tasks)
+  switch len(tasks) {
+    case 0:
+      return nilTask{}
+    case 1:
+      return tasks[0]
+    default:
+      return parallelTasks(tasks)
+  }
 }
 
 // SeriesTasks returns a task that performas all the passed in tasks in
 // series. If one of the tasks reports an error, the others following it
 // don't get executed.
 func SeriesTasks(tasks ...Task) Task {
-  return seriesTasks(tasks)
+  switch len(tasks) {
+    case 0:
+      return nilTask{}
+    case 1:
+      return tasks[0]
+    default:
+      return seriesTasks(tasks)
+  }
 }
 
 // RepeatingTask returns a task that performs the pased in task n times.
 func RepeatingTask(t Task, n int) Task {
-  return &repeatingTask{t, n}
+  switch {
+    case n <= 0:
+      return nilTask{}
+    case n == 1:
+      return t
+    default:
+      return &repeatingTask{t, n}
+  }
+}
+
+// NilTask returns a task that does nothing.
+// NilTask is draft API and may change in incompatible ways.
+func NilTask() Task {
+  return nilTask{}
 }
 
 // ClockForTesting is a test implementation of Clock.
@@ -433,6 +460,12 @@ func (r *repeatingTask) Do(e *Execution) {
       return
     }
   }
+}
+
+type nilTask struct {
+}
+
+func (n nilTask) Do(e *Execution) {
 }
 
 type systemClock struct {
