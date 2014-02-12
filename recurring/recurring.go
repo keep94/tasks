@@ -25,7 +25,7 @@ const (
 
 const (
   Weekdays = Monday | Tuesday | Wednesday | Thursday | Friday
-  Weedend = Saturday | Sunday
+  Weekend = Saturday | Sunday
 )
 
 var (
