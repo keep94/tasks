@@ -226,7 +226,7 @@ func TestEndTask(t *testing.T) {
 }
 
 func TestNoError(t *testing.T) {
-  eTask := &fakeTask{}
+  eTask := tasks.NilTask()
   e := tasks.Start(eTask)
   <-e.Done()
   if e.Error() != nil {
@@ -235,7 +235,7 @@ func TestNoError(t *testing.T) {
 }
 
 func TestNoError2(t *testing.T) {
-  eTask := &fakeTask{}
+  eTask := tasks.NilTask()
   if err := tasks.Run(eTask); err != nil {
     t.Error("Expected no error.")
   }
@@ -271,7 +271,7 @@ func TestRecurring(t *testing.T) {
 }
 
 func TestRecurringCloseStream(t *testing.T) {
-  task := &fakeTask{}
+  task := tasks.NilTask()
   r := &testForClose{}
   tasks.RunForTesting(
       tasks.RecurringTask(task, r), &tasks.ClockForTesting{kNow})
@@ -281,7 +281,7 @@ func TestRecurringCloseStream(t *testing.T) {
 }
 
 func TestRecurringEnded(t *testing.T) {
-  tk := &fakeTask{}
+  tk := tasks.NilTask()
   r := recurring.AtInterval(kNow, time.Hour)
   e := tasks.Start(tasks.RecurringTask(tk, r))
   e.End()

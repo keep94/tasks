@@ -156,11 +156,7 @@ func TestCombine(t *testing.T) {
 }
 
 func TestCombine2(t *testing.T) {
-  r := recurring.Combine(
-      recurring.Until(
-          recurring.AtInterval(kNow, 2 * time.Hour), kNow.Add(2 * time.Hour)),
-      recurring.Until(
-          recurring.AtInterval(kNow, 3 * time.Hour), kNow.Add(3 * time.Hour)))
+  r := recurring.Combine(recurring.Nil(), recurring.Nil())
   verifyTimes(
       t,
       r.ForTime(kNow))
