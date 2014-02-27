@@ -207,7 +207,6 @@ func RepeatingTask(t Task, n int) Task {
 }
 
 // NilTask returns a task that does nothing.
-// NilTask is draft API and may change in incompatible ways.
 func NilTask() Task {
   return nilTask{}
 }

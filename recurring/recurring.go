@@ -165,7 +165,6 @@ func OnDate(targetTime time.Time) R {
 }
 
 // Nil returns a new R instance that represents never happening.
-// Nil is draft API and my change in incompatible ways.
 func Nil() R {
   return nilRecurring{}
 }
