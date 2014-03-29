@@ -68,6 +68,31 @@ func TestOnDays(t *testing.T) {
       firstTime.AddDate(0, 0, 6), // Wednesday
       firstTime.AddDate(0, 0, 7)) // Thursday
 }
+
+func TestFilterNested(t *testing.T) {
+  firstTime := time.Date(2013, 9, 12, 18, 0, 0, 0, time.Local)
+  r := recurring.Until(
+      recurring.Filter(
+          recurring.Filter(
+              recurring.AtTime(18, 0),
+              recurring.OnDays(recurring.Weekdays)),
+          functional.NewFilterer(func(ptr interface{}) error {
+            p := ptr.(*time.Time)
+            if p.Day() % 2 != 0 {
+              return functional.Skipped
+            }
+            return nil
+          })),
+      firstTime.AddDate(0, 0, 8))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,  // Thursday
+      firstTime.AddDate(0, 0, 4), // Monday
+      firstTime.AddDate(0, 0, 6)) // Wednesday
+}
+
+
     
 func TestAfter(t *testing.T) {
   firstTime := time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
@@ -82,6 +107,20 @@ func TestAfter(t *testing.T) {
   firstTime = time.Date(2013, 9, 13, 17, 21, 0, 0, time.Local)
   r = recurring.Until(
       recurring.After(recurring.AtTime(14, 21), 3 * time.Hour),
+      firstTime.AddDate(0, 0, 2))
+  verifyTimes(
+      t,
+      r.ForTime(kNow),
+      firstTime,
+      firstTime.AddDate(0, 0, 1))
+}
+
+func TestAfterNested(t *testing.T) {
+  firstTime := time.Date(2013, 9, 12, 17, 22, 0, 0, time.Local)
+  r := recurring.Until(
+      recurring.After(
+          recurring.After(recurring.AtTime(14, 22), 2 * time.Hour),
+          time.Hour),
       firstTime.AddDate(0, 0, 2))
   verifyTimes(
       t,
@@ -226,6 +265,45 @@ func TestStartAtUntil(t *testing.T) {
       thanksgiving11and12.ForTime(kNow),
       time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local),
       time.Date(2013, 11, 28, 12, 0, 0, 0, time.Local))
+}
+      
+func TestStartAtUntilNested(t *testing.T) {
+  hourly := recurring.OnTheHour()
+  thanksgiving9 := time.Date(2013, 11, 28, 9, 0, 0, 0, time.Local)
+  thanksgiving10 := time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local)
+  thanksgiving12 := time.Date(2013, 11, 28, 12, 0, 0, 0, time.Local)
+  thanksgiving13 := time.Date(2013, 11, 28, 13, 0, 0, 0, time.Local)
+  thanksgiving10and11 := recurring.Until(
+      recurring.StartAt(
+          recurring.Until(
+              recurring.StartAt(hourly, thanksgiving10),
+              thanksgiving13),
+          thanksgiving9),
+      thanksgiving12)
+  verifyTimes(
+      t,
+      thanksgiving10and11.ForTime(kNow),
+      time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local))
+  thanksgiving10and11again := recurring.Until(
+      recurring.StartAt(
+          recurring.Until(
+              recurring.StartAt(hourly, thanksgiving9),
+              thanksgiving12),
+          thanksgiving10),
+      thanksgiving13)
+  verifyTimes(
+      t,
+      thanksgiving10and11again.ForTime(kNow),
+      time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local))
+  thanksgiving9On := recurring.StartAt(hourly, thanksgiving9)
+  verifyTimes(
+      t,
+      functional.Slice(thanksgiving9On.ForTime(kNow), 0, 3),
+      time.Date(2013, 11, 28, 9, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 10, 0, 0, 0, time.Local),
+      time.Date(2013, 11, 28, 11, 0, 0, 0, time.Local))
 }
       
 func verifyTimes(t *testing.T, s functional.Stream, expectedTimes ...time.Time) {

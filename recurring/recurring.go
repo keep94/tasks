@@ -73,54 +73,37 @@ func Combine(rs ...R) R {
 // Filter returns a new R instance that filters the time.Time Streams
 // that r creates
 func Filter(r R, f functional.Filterer) R {
-  return modify(
-      r,
-      func(s functional.Stream) functional.Stream {
-        return functional.Filter(f, s)
-      })
+  if nested, ok := r.(*filterR); ok {
+    return &filterR{
+        recurring: nested.recurring, filter: functional.All(nested.filter, f)}
+  }
+  return &filterR{recurring: r, filter: f}
 }
 
 // After returns a new R instance that represents duration d after every time
 // in r
 func After(r R, d time.Duration) R {
-  return RFunc(func(t time.Time) functional.Stream {
-    return functional.Filter(
-        functional.NewFilterer(func(ptr interface{}) error {
-          p := ptr.(*time.Time)
-          *p = (*p).Add(d)
-          return nil
-        }),
-        r.ForTime(t.Add(-1 * d)))
-  })
+  if nested, ok := r.(*afterR); ok {
+    return &afterR{recurring: nested.recurring, after: nested.after + d}
+  }
+  return &afterR{recurring: r, after: d}
 }
 
 // StartAt returns a new R that is the same as r but contains only the times
 // on or after startTime.
 func StartAt(r R, startTime time.Time) R {
-  startTime = startTime.Add(-1 * time.Nanosecond)
-  return RFunc(func(t time.Time) functional.Stream {
-    if t.Before(startTime) {
-      return r.ForTime(startTime)
-    }
-    return r.ForTime(t)
-  })
+  if nested, ok := r.(*startUntilR); ok {
+    return nested.AddStart(startTime)
+  }
+  return withStart(r, startTime)
 }
 
 // Until returns a new R that is the same as r but contains only times before t.
 func Until(r R, t time.Time) R {
-  return modify(
-      r,
-      func(s functional.Stream) functional.Stream {
-        return functional.TakeWhile(
-            functional.NewFilterer(func(ptr interface{}) error {
-              p := ptr.(*time.Time)
-              if p.Before(t) {
-                return nil
-              }
-              return functional.Skipped
-            }),
-            s)
-      })
+  if nested, ok := r.(*startUntilR); ok {
+    return nested.AddUntil(t)
+  }
+  return withUntil(r, t)
 }
 
 // AtInterval returns a new R instance that represents starting at time
@@ -182,10 +165,91 @@ func OnDays(dayMask DaysOfWeek) functional.Filterer {
   })
 }
 
-func modify(r R, f func(s functional.Stream) functional.Stream) R {
-  return RFunc(func(t time.Time) functional.Stream {
-    return f(r.ForTime(t))
-  })
+type afterR struct {
+  recurring R
+  after time.Duration
+}
+
+func (r *afterR) Filter(ptr interface{}) error {
+  p := ptr.(*time.Time)
+  *p = (*p).Add(r.after)
+  return nil
+}
+
+func (r *afterR) ForTime(t time.Time) functional.Stream {
+  return functional.Filter(r, r.recurring.ForTime(t.Add(-1 * r.after)))
+}
+
+type startUntilR struct {
+  recurring R
+  start time.Time
+  until time.Time
+  startSet bool
+  untilSet bool
+}
+
+func withStart(r R, t time.Time) *startUntilR {
+  return &startUntilR{
+      recurring: r,
+      start: t.Add(-1 * time.Nanosecond),
+      startSet: true}
+}
+
+func (r *startUntilR) AddStart(t time.Time) *startUntilR {
+  t = t.Add(-1 * time.Nanosecond)
+  if r.startSet && !t.After(r.start) {
+    return r
+  }
+  result := *r
+  result.start = t
+  result.startSet = true
+  return &result
+}
+
+func withUntil(r R, t time.Time) *startUntilR {
+  return &startUntilR{
+      recurring: r,
+      until: t,
+      untilSet: true}
+}
+
+func (r *startUntilR) AddUntil(t time.Time) *startUntilR {
+  if r.untilSet && !t.Before(r.until) {
+    return r
+  }
+  result := *r
+  result.until = t
+  result.untilSet = true
+  return &result
+}
+
+func (r *startUntilR) Filter(ptr interface{}) error {
+  p := ptr.(*time.Time)
+  if p.Before(r.until) {
+    return nil
+  }
+  return functional.Skipped
+}
+
+func (r *startUntilR) ForTime(t time.Time) functional.Stream {
+  if r.startSet && t.Before(r.start) {
+    t = r.start
+  }
+  result := r.recurring.ForTime(t)
+  if r.untilSet {
+    return functional.TakeWhile(r, result)
+  }
+  return result
+}
+
+type filterR struct {
+  recurring R
+  filter functional.Filterer
+}
+
+func (r *filterR) ForTime(t time.Time) functional.Stream {
+  result := r.recurring.ForTime(t)
+  return functional.Filter(r.filter, result)
 }
 
 type dateStream struct {
