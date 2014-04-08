@@ -166,11 +166,24 @@ func TestSeriesZeroOrOne(t *testing.T) {
 }
 
 func TestRepeatingTask(t *testing.T) {
+  verifyRepeatingTask(t, 5)
+}
+
+func TestRepeatingTask2(t *testing.T) {
+  verifyRepeatingTask(t, 1)
+}
+
+func TestRepeatingTask3(t *testing.T) {
+  verifyRepeatingTask(t, 0)
+}
+
+func TestNestedRepeatingTask(t *testing.T) {
   task := &fakeTask{}
-  e := tasks.Start(tasks.RepeatingTask(task, 5))
+  e := tasks.Start(tasks.RepeatingTask(
+      tasks.RepeatingTask(task, 2), 3))
   <-e.Done()
-  if task.timesRun != 5 {
-    t.Errorf("Expected 5, got %v", task.timesRun)
+  if task.timesRun != 6 {
+    t.Errorf("Expected 6, got %v", task.timesRun)
   }
 }
 
@@ -440,3 +453,11 @@ func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
   }
 }
 
+func verifyRepeatingTask(t *testing.T, n int) {
+  task := &fakeTask{}
+  e := tasks.Start(tasks.RepeatingTask(task, n))
+  <-e.Done()
+  if task.timesRun != n {
+    t.Errorf("Expected %d, got %d", n, task.timesRun)
+  }
+}

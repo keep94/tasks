@@ -7,6 +7,7 @@
 package recurring
 
 import (
+  "github.com/keep94/common"
   "github.com/keep94/gofunctional3/functional"
   "time"
 )
@@ -54,20 +55,8 @@ func (f RFunc) ForTime(t time.Time) functional.Stream {
 // Combine combines multiple R instances together and returns them
 // as a single one.
 func Combine(rs ...R) R {
-  switch len(rs) {
-    case 0:
-      return nilRecurring{}
-    case 1:
-      return rs[0]
-    default:
-      return RFunc(func(t time.Time) functional.Stream {
-        streams := make([]functional.Stream, len(rs))
-        for i := range rs {
-          streams[i] = rs[i].ForTime(t)
-        }
-        return combineStreams(streams)
-      })
-  }
+  var aggregate combinedRecurring
+  return common.Join(rs, aggregate, nilRecurring{}).(R)
 }
 
 // Filter returns a new R instance that filters the time.Time Streams
@@ -250,6 +239,16 @@ type filterR struct {
 func (r *filterR) ForTime(t time.Time) functional.Stream {
   result := r.recurring.ForTime(t)
   return functional.Filter(r.filter, result)
+}
+
+type combinedRecurring []R
+
+func (rs combinedRecurring) ForTime(t time.Time) functional.Stream {
+  streams := make([]functional.Stream, len(rs))
+  for i := range rs {
+    streams[i] = rs[i].ForTime(t)
+  }
+  return combineStreams(streams)
 }
 
 type dateStream struct {

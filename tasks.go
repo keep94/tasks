@@ -7,6 +7,7 @@
 package tasks
 
 import (
+  "github.com/keep94/common"
   "github.com/keep94/gofunctional3/functional"
   "github.com/keep94/tasks/recurring"
   "sync"
@@ -170,28 +171,16 @@ func RecurringTask(t Task, r recurring.R) Task {
 // ParallelTasks returns a task that performs all the passed in tasks in
 // parallel.
 func ParallelTasks(tasks ...Task) Task {
-  switch len(tasks) {
-    case 0:
-      return nilTask{}
-    case 1:
-      return tasks[0]
-    default:
-      return parallelTasks(tasks)
-  }
+  var aggregate parallelTasks
+  return common.Join(tasks, aggregate, nilTask{}).(Task)
 }
 
 // SeriesTasks returns a task that performas all the passed in tasks in
 // series. If one of the tasks reports an error, the others following it
 // don't get executed.
 func SeriesTasks(tasks ...Task) Task {
-  switch len(tasks) {
-    case 0:
-      return nilTask{}
-    case 1:
-      return tasks[0]
-    default:
-      return seriesTasks(tasks)
-  }
+  var aggregate seriesTasks
+  return common.Join(tasks, aggregate, nilTask{}).(Task)
 }
 
 // RepeatingTask returns a task that performs the pased in task n times.
@@ -202,7 +191,10 @@ func RepeatingTask(t Task, n int) Task {
     case n == 1:
       return t
     default:
-      return &repeatingTask{t, n}
+      if nested, ok := t.(*repeatingTask); ok {
+        return &repeatingTask{t: nested.t, n: nested.n * n}
+      }
+      return &repeatingTask{t: t, n: n}
   }
 }
 
