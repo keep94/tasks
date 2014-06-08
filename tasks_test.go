@@ -401,6 +401,146 @@ func TestSingleExecutorClose(t *testing.T) {
   <-e.Done()
 }
 
+func TestSingleExecutorPause(t *testing.T) {
+  task1 := &fakeTask{runDuration: time.Hour}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  se.Start(task1)
+  pause(se)
+}
+
+func TestPauseParallel(t *testing.T) {
+  task := &pauseTask{}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  ts := make([]tasks.Task, 20)
+  for i := range ts {
+    ts[i] = tasks.RepeatingTask(task, 2147483647)
+  }
+  // Tasks in executor must support equality
+  e := se.Start(&taskStruct{tasks.ParallelTasks(ts...)})
+  pause(se)
+  time.Sleep(5 * time.Millisecond)
+  expected := len(ts)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  resume(se)
+  pause(se)
+  // no-op
+  pause(se)
+  time.Sleep(5 * time.Millisecond)
+  expected += len(ts)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+  }
+  e.End()
+  <-e.Done()
+}
+
+
+func TestPauseSeries(t *testing.T) {
+  task := &pauseTask{}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  ts := make([]tasks.Task, 20)
+  for i := range ts {
+    ts[i] = tasks.RepeatingTask(task, 2147483647)
+  }
+  // Tasks in executor must support equality
+  e := se.Start(&taskStruct{tasks.SeriesTasks(ts...)})
+  pause(se)
+  time.Sleep(5 * time.Millisecond)
+  expected := 1
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    // For next test, we expect count not to change from this test
+    expected = out
+  }
+  resume(se)
+  resume(se)
+  pause(se)
+  time.Sleep(5 * time.Millisecond)
+  expected += 1
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  resume(se)
+  e.End()
+  <-e.Done()
+}
+
+func TestPauseSeriesItself(t *testing.T) {
+  task := &fakeTask2{runDuration: time.Millisecond}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  // Tasks in executor must support equality
+  e := se.Start(&taskStruct{tasks.SeriesTasks(task, task)})
+  pause(se)
+  select {
+    case <-e.Done():
+      t.Error("Pause not working")
+    case <-time.After(10 * time.Millisecond):
+  }
+  e.End()
+  <-e.Done()
+}
+
+func TestSingleExecutorPauseFromBeginning(t *testing.T) {
+  task := &pauseTask{}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  se.Pause()
+  e := se.Start(&taskStruct{tasks.RepeatingTask(task, 2147483647)})
+  time.Sleep(5 * time.Millisecond)
+  expected := 0
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    // For next test, we expect count not to change from this test
+    expected = out
+  }
+  resume(se)
+  pause(se)
+  expected += 1
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+  }
+  e.End()
+  <-e.Done()
+}
+
+type pauseTask struct {
+  count int            // Number of completed runs.
+  lock sync.Mutex
+}
+  
+func (pt *pauseTask) Do(e *tasks.Execution) {
+  time.Sleep(time.Millisecond)
+  pt.add(1)
+}
+
+func (pt *pauseTask) add(x int) {
+  pt.lock.Lock()
+  defer pt.lock.Unlock()
+  pt.count += x
+}
+
+func (pt *pauseTask) Count() int {
+  pt.lock.Lock()
+  defer pt.lock.Unlock()
+  return pt.count
+}
+
+type fakeTask2 struct {
+  runDuration time.Duration // How long task should take to run.
+}
+
+func (ft *fakeTask2) Do(e *tasks.Execution) {
+  time.Sleep(ft.runDuration)
+}
+
 type fakeTask struct {
   runDuration time.Duration // How long task should take to run.
   err error               // the error task is to report.
@@ -441,6 +581,10 @@ func (r *testForClose) Close() error {
   return nil
 }
 
+type taskStruct struct {
+  tasks.Task
+}
+
 func verifyTimes(t *testing.T, actual []time.Time, expected ...time.Time) {
   if len(actual) != len(expected) {
     t.Errorf("Expected %v timestamps, got %v", len(expected), len(actual))
@@ -461,3 +605,15 @@ func verifyRepeatingTask(t *testing.T, n int) {
     t.Errorf("Expected %d, got %d", n, task.timesRun)
   }
 }
+
+// TODO: Find better way to handle pause & resume for testing
+func pause(se *tasks.SingleExecutor) {
+  time.Sleep(50 * time.Microsecond)
+  se.Pause()
+}
+
+func resume(se *tasks.SingleExecutor) {
+  se.Resume()
+  time.Sleep(50 * time.Microsecond)
+}
+

@@ -14,6 +14,11 @@ import (
   "time"
 )
 
+var (
+  kPauseTask Task = pauseTask{}
+  kResumeTask Task = resumeTask{}
+)
+
 // Task represents any task
 type Task interface {
 
@@ -47,6 +52,7 @@ type Execution struct {
   done chan struct{}
   bEnded bool
   err error
+  g *gate
   lock sync.Mutex
 }
 
@@ -60,24 +66,41 @@ func Run(task Task) error {
 // an implementation of the Clock interface for testing.
 func RunForTesting(task Task, clock Clock) (err error) {
   execution := &Execution{
-      Clock: clock, done: make(chan struct{}), ended: make(chan struct{})}
+      Clock: clock,
+      done: make(chan struct{}),
+      ended: make(chan struct{}),
+      g: newGate(false)}
+  defer execution.finalize()
+  execution.g.Arrive()
+  defer execution.g.Leave()
   task.Do(execution)
-  execution.End()
-  close(execution.done)
   return execution.Error()
 }
 
 // Start starts a task in a separate goroutine and returns immediately.
 // Start returns that particular execution of the task.
 func Start(task Task) *Execution {
+  return startForPause(task, nil, false)
+}
+
+func startForPause(task Task, cleanup func(Task), paused bool) *Execution {
   execution := &Execution{
       Clock: systemClock{},
       done: make(chan struct{}),
-      ended: make(chan struct{})}
+      ended: make(chan struct{}),
+      g: newGate(paused)}
   go func() {
+    defer execution.finalize()
+    if cleanup != nil {
+      defer cleanup(task)
+    }
+    execution.g.Arrive()
+    defer execution.g.Leave()
+    paused, ended := execution.g.Wait()
+    if paused && ended {
+      return
+    }
     task.Do(execution)
-    execution.End()
-    close(execution.done)
   }()
   return execution
 }
@@ -91,11 +114,10 @@ func (e *Execution) Error() error {
 
 // End signals that execution should end.
 func (e *Execution) End() {
-  if e.markEnded() {
-    close(e.ended)
-  }
+  e._end()
+  e.g.End()
 }
-
+    
 // Ended returns a channel that gets closed when this execution is signaled
 // to end.
 func (e *Execution) Ended() <-chan struct{} {
@@ -110,37 +132,32 @@ func (e *Execution) Done() <-chan struct{} {
 // IsDone returns true if this execution is done or false if it is still
 // in progress.
 func (e *Execution) IsDone() bool {
-  select {
-    case <-e.done:
-      return true
-    default:
-      return false
-  }
-  return false
+  return isUnblocked(e.done)
 }
 
 // IsEnded returns true if this execution has been signaled to end.
 func (e *Execution) IsEnded() bool {
-  select {
-    case <-e.ended:
-      return true
-    default:
-      return false
-  }
-  return false
+  return isUnblocked(e.ended)
 }
 
 // Sleep sleeps for the specified duration or until this execution should
-// end, whichever comes first. Sleep returns true if it slept the entire
-// duration or false if it returned early because this execution should end.
+// end, whichever comes first. Sleep returns false if it returned early
+// because this execution should end; otherwise it returns true.
+// If paused, the sleep timer continues to run normally; however, Sleep will
+// continue to block while paused even after the sleep timer runs out.
 func (e *Execution) Sleep(d time.Duration) bool {
-  select {
-    case <-e.ended:
-      return false
-    case <-e.After(d):
-      return true
-  }
-  return false
+  return e.Yield(func() {
+    e.sleep(d)
+  })
+}
+
+// Yield runs sleepFunc and after that returns true unless this exeuction
+// was signaled to end in which case it returns false. sleepFunc can be nil.
+// If paused, sleepFunc continues to run uninterrupted; however, Yield will
+// continue to block while paused even after sleepFunc ends.
+// Yield is draft API and is subject to change.
+func (e *Execution) Yield(sleepFunc func()) bool {
+  return e.g.Yield(sleepFunc)
 }
 
 // SetError lets a task report an error.
@@ -153,12 +170,38 @@ func (e *Execution) SetError(err error) {
   e.err = err
 }
 
+func (e *Execution) _end() {
+  if e.markEnded() {
+    close(e.ended)
+  }
+}
+
 func (e *Execution) markEnded() bool {
   e.lock.Lock()
   defer e.lock.Unlock()
   result := !e.bEnded
   e.bEnded = true
   return result
+}
+
+func (e *Execution) sleep(d time.Duration) {
+  select {
+    case <-e.ended:
+    case <-e.After(d):
+  }
+}
+
+func (e *Execution) finalize() {
+  e._end()
+  close(e.done)
+}
+
+func (e *Execution) pause() {
+  e.g.Shut()
+}
+
+func (e *Execution) resume() {
+  e.g.Open()
 }
 
 // RecurringTask returns a task that does t at each time that r specifies.
@@ -244,6 +287,19 @@ func (se *SingleExecutor) Start(t Task) *Execution {
   return (*MultiExecutor)(se).Start(t)
 }
 
+// Pause pauses this executor. Pause blocks until all tasks in this executor
+// have actually stopped.
+// Pause is draft API and is subject to change.
+func (se *SingleExecutor) Pause() {
+  (*MultiExecutor)(se).Pause()
+}
+
+// Resume resumes this executor. 
+// Resume is draft API and is subject to change.
+func (se *SingleExecutor) Resume() {
+  (*MultiExecutor)(se).Resume()
+}
+
 // Current returns the current running task and its execution. If no task
 // is running, Current may return nil, nil or it may return the last run
 // task along with its execution.
@@ -306,6 +362,19 @@ func (me *MultiExecutor) Start(t Task) *Execution {
   return <-me.taskRetCh
 }
 
+// Pause pauses this executor. Pause blocks until all tasks in this executor
+// have actually stopped.
+// Pause is draft API and is subject to change.
+func (me *MultiExecutor) Pause() {
+  me.Start(kPauseTask)
+}
+
+// Resume resumes this executor. 
+// Resume is draft API and is subject to change.
+func (me *MultiExecutor) Resume() {
+  me.Start(kResumeTask)
+}
+
 // Tasks returns the running tasks.
 func (me *MultiExecutor) Tasks() TaskCollection {
   return me.tc
@@ -314,12 +383,14 @@ func (me *MultiExecutor) Tasks() TaskCollection {
 // Close frees the resources of this instance and always returns nil. Close
 // interrupts any currently running tasks.
 func (me *MultiExecutor) Close() error {
+  me.taskCh <- nil
   close(me.taskCh)
   interruptAll(me.tc.Conflicts(nil))
   return nil
 }
 
 func (me *MultiExecutor) loop() {
+  var bPaused bool
   for {
     // Get the next task from the Start method.
     t := <-me.taskCh
@@ -328,15 +399,30 @@ func (me *MultiExecutor) loop() {
       return
     }
 
+    if t == kPauseTask {
+      pauseAll(me.tc.Conflicts(nil))
+      bPaused = true
+      me.taskRetCh <- nil
+      continue
+    }
+    if t == kResumeTask {
+      resumeAll(me.tc.Conflicts(nil))
+      bPaused = false
+      me.taskRetCh <- nil
+      continue
+    }
+
     // Interrupt the conflicting tasks and wait for them to end.
     interruptAll(me.tc.Conflicts(t))
 
     // Start executing our task taking care to remove it from the collection
     // of running tasks when it completes.
-    exec := Start(TaskFunc(func(e *Execution) {
-      t.Do(e)
-      me.tc.Remove(t)
-    }))
+    exec := startForPause(
+        t,
+        func(tk Task) {
+          me.tc.Remove(tk)
+        },
+        bPaused)
 
     // Add our newly running task to the collection of running tasks.
     me.tc.Add(t, exec)
@@ -421,10 +507,14 @@ func (p parallelTasks) Do(e *Execution) {
   wg.Add(len(p))
   for _, task := range p {
     go func(t Task) {
+      defer wg.Done()
+      e.g.Arrive()
+      defer e.g.Leave()
       t.Do(e)
-      wg.Done()
     }(task)
   }
+  e.g.Leave()
+  defer e.g.Arrive()
   wg.Wait()
 }
 
@@ -433,7 +523,7 @@ type seriesTasks []Task
 func (s seriesTasks) Do(e *Execution) {
   for _, task := range s {
     task.Do(e)
-    if e.IsEnded() || e.Error() != nil {
+    if e.Error() != nil || !e.Yield(nil) {
       return
     }
   }
@@ -447,7 +537,7 @@ type repeatingTask struct {
 func (r *repeatingTask) Do(e *Execution) {
   for i := 0; i < r.n; i++ {
     r.t.Do(e)
-    if e.IsEnded() || e.Error() != nil {
+    if e.Error() != nil || !e.Yield(nil) {
       return
     }
   }
@@ -470,6 +560,108 @@ func (s systemClock) After(d time.Duration) <-chan time.Time {
   return time.After(d)
 }
 
+type gate struct {
+  lock sync.Mutex
+  activeCount int
+  bPaused bool
+  bEnded bool
+  allPaused *sync.Cond
+  wakeup *sync.Cond
+}
+
+func newGate(paused bool) *gate {
+  result := &gate{bPaused: paused}
+  result.allPaused = sync.NewCond(&result.lock)
+  result.wakeup = sync.NewCond(&result.lock)
+  return result
+}
+
+func (g *gate) Arrive() {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.arrive()
+}
+
+func (g *gate) Leave() {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.leave()
+}
+
+func (g *gate) Open() {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.bPaused = false
+  g.wakeup.Broadcast()
+}
+
+func (g *gate) Shut() {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.bPaused = true
+  for g.activeCount > 0 {
+    g.allPaused.Wait()
+  }
+}
+
+func (g *gate) End() {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.bEnded = true
+  g.wakeup.Broadcast()
+}
+
+func (g *gate) Yield(waitFunc func()) bool {
+  if waitFunc != nil {
+    g.executeWaitFunc(waitFunc)
+  }
+  _, ended := g.Wait()
+  return !ended
+}
+
+func (g *gate) Wait() (paused bool, ended bool) {
+  g.lock.Lock()
+  defer g.lock.Unlock()
+  g.leave()
+  defer g.arrive()
+  for g.bPaused && !g.bEnded {
+    g.wakeup.Wait()
+  }
+  return g.bPaused, g.bEnded
+}
+
+func (g *gate) executeWaitFunc(waitFunc func()) {
+  g.Leave()
+  defer g.Arrive()
+  waitFunc()
+}
+
+func (g *gate) arrive() {
+  g.activeCount++
+}
+
+func (g *gate) leave() {
+  g.activeCount--
+  if g.activeCount < 0 {
+    panic("negative activeCount")
+  }
+  if g.activeCount == 0 {
+    g.allPaused.Broadcast()
+  }
+}
+
+type pauseTask struct {
+}
+
+func (p pauseTask) Do(e *Execution) {
+}
+
+type resumeTask struct {
+}
+
+func (r resumeTask) Do(e *Execution) {
+}
+
 func interruptAll(executions []*Execution) {
   for _, e := range executions {
     e.End()
@@ -479,3 +671,23 @@ func interruptAll(executions []*Execution) {
   }
 }
 
+func pauseAll(executions []*Execution) {
+  for _, e := range executions {
+    e.pause()
+  }
+}
+
+func resumeAll(executions []*Execution) {
+  for _, e := range executions {
+    e.resume()
+  }
+}
+
+func isUnblocked(ch <-chan struct{}) bool {
+  select {
+    case <-ch:
+      return true
+    default:
+  }
+  return false
+}
