@@ -641,7 +641,6 @@ func verifyRepeatingTask(t *testing.T, n int) {
   }
 }
 
-// TODO: Find better way to handle pause & resume for testing
 func waitForStarts(starting <-chan bool, count int) {
   for i := 0; i < count; i++ {
     <-starting
