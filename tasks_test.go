@@ -402,15 +402,20 @@ func TestSingleExecutorClose(t *testing.T) {
 }
 
 func TestSingleExecutorPause(t *testing.T) {
-  task1 := &fakeTask{runDuration: time.Hour}
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &fakeTask2{runDuration: time.Hour, Starting: starting}
   se := tasks.NewSingleExecutor()
   defer se.Close()
   se.Start(task1)
-  pause(se)
+  waitForStarts(starting, 1)
+  se.Pause()
 }
 
 func TestPauseParallel(t *testing.T) {
-  task := &pauseTask{}
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task := &pauseTask{Starting: starting}
   se := tasks.NewSingleExecutor()
   defer se.Close()
   ts := make([]tasks.Task, 20)
@@ -419,19 +424,29 @@ func TestPauseParallel(t *testing.T) {
   }
   // Tasks in executor must support equality
   e := se.Start(&taskStruct{tasks.ParallelTasks(ts...)})
-  pause(se)
-  time.Sleep(5 * time.Millisecond)
+  waitForStarts(starting, len(ts))
+  se.Pause()
   expected := len(ts)
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
     expected = out
   }
-  resume(se)
-  pause(se)
-  // no-op
-  pause(se)
   time.Sleep(5 * time.Millisecond)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  se.Resume()
+  waitForStarts(starting, len(ts))
+  se.Pause()
+  // no-op
+  se.Pause()
   expected += len(ts)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  time.Sleep(5 * time.Millisecond)
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
   }
@@ -439,9 +454,10 @@ func TestPauseParallel(t *testing.T) {
   <-e.Done()
 }
 
-
 func TestPauseSeries(t *testing.T) {
-  task := &pauseTask{}
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task := &pauseTask{Starting: starting}
   se := tasks.NewSingleExecutor()
   defer se.Close()
   ts := make([]tasks.Task, 20)
@@ -450,35 +466,47 @@ func TestPauseSeries(t *testing.T) {
   }
   // Tasks in executor must support equality
   e := se.Start(&taskStruct{tasks.SeriesTasks(ts...)})
-  pause(se)
-  time.Sleep(5 * time.Millisecond)
+  waitForStarts(starting, 1)
+  se.Pause()
   expected := 1
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
-    // For next test, we expect count not to change from this test
     expected = out
   }
-  resume(se)
-  resume(se)
-  pause(se)
   time.Sleep(5 * time.Millisecond)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  se.Resume()
+  se.Resume()
+  waitForStarts(starting, 1)
+  se.Pause()
   expected += 1
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
     expected = out
   }
-  resume(se)
+  time.Sleep(5 * time.Millisecond)
+  if out := task.Count(); out != expected {
+    t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
+  }
+  se.Resume()
   e.End()
   <-e.Done()
 }
 
 func TestPauseSeriesItself(t *testing.T) {
-  task := &fakeTask2{runDuration: time.Millisecond}
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task := &pauseTask{Starting: starting}
   se := tasks.NewSingleExecutor()
   defer se.Close()
   // Tasks in executor must support equality
   e := se.Start(&taskStruct{tasks.SeriesTasks(task, task)})
-  pause(se)
+  waitForStarts(starting, 1)
+  se.Pause()
   select {
     case <-e.Done():
       t.Error("Pause not working")
@@ -489,7 +517,9 @@ func TestPauseSeriesItself(t *testing.T) {
 }
 
 func TestSingleExecutorPauseFromBeginning(t *testing.T) {
-  task := &pauseTask{}
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task := &pauseTask{Starting: starting}
   se := tasks.NewSingleExecutor()
   defer se.Close()
   se.Pause()
@@ -501,8 +531,9 @@ func TestSingleExecutorPauseFromBeginning(t *testing.T) {
     // For next test, we expect count not to change from this test
     expected = out
   }
-  resume(se)
-  pause(se)
+  se.Resume()
+  waitForStarts(starting, 1)
+  se.Pause()
   expected += 1
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
@@ -512,11 +543,13 @@ func TestSingleExecutorPauseFromBeginning(t *testing.T) {
 }
 
 type pauseTask struct {
+  Starting chan bool
   count int            // Number of completed runs.
   lock sync.Mutex
 }
   
 func (pt *pauseTask) Do(e *tasks.Execution) {
+  pt.Starting <- true
   time.Sleep(time.Millisecond)
   pt.add(1)
 }
@@ -535,10 +568,12 @@ func (pt *pauseTask) Count() int {
 
 type fakeTask2 struct {
   runDuration time.Duration // How long task should take to run.
+  Starting chan bool
 }
 
 func (ft *fakeTask2) Do(e *tasks.Execution) {
-  time.Sleep(ft.runDuration)
+  ft.Starting <- true
+  e.Sleep(ft.runDuration)
 }
 
 type fakeTask struct {
@@ -607,13 +642,9 @@ func verifyRepeatingTask(t *testing.T, n int) {
 }
 
 // TODO: Find better way to handle pause & resume for testing
-func pause(se *tasks.SingleExecutor) {
-  time.Sleep(50 * time.Microsecond)
-  se.Pause()
-}
-
-func resume(se *tasks.SingleExecutor) {
-  se.Resume()
-  time.Sleep(50 * time.Microsecond)
+func waitForStarts(starting <-chan bool, count int) {
+  for i := 0; i < count; i++ {
+    <-starting
+  }
 }
 
