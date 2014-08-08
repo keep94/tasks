@@ -155,7 +155,6 @@ func (e *Execution) Sleep(d time.Duration) bool {
 // was signaled to end in which case it returns false. sleepFunc can be nil.
 // If paused, sleepFunc continues to run uninterrupted; however, Yield will
 // continue to block while paused even after sleepFunc ends.
-// Yield is draft API and is subject to change.
 func (e *Execution) Yield(sleepFunc func()) bool {
   return e.g.Yield(sleepFunc)
 }
@@ -287,15 +286,15 @@ func (se *SingleExecutor) Start(t Task) *Execution {
   return (*MultiExecutor)(se).Start(t)
 }
 
-// Pause pauses this executor. Pause blocks until all tasks in this executor
-// have actually stopped.
-// Pause is draft API and is subject to change.
+// Pause pauses this executor. Pause blocks until all running tasks in this
+// executor have either ended or called Yield or Sleep on their Execution
+// instance.
 func (se *SingleExecutor) Pause() {
   (*MultiExecutor)(se).Pause()
 }
 
-// Resume resumes this executor. 
-// Resume is draft API and is subject to change.
+// Resume resumes this once paused executor by letting any in-progress
+// tasks that had called Yield or Sleep on their Execution instance continue.
 func (se *SingleExecutor) Resume() {
   (*MultiExecutor)(se).Resume()
 }
@@ -362,15 +361,15 @@ func (me *MultiExecutor) Start(t Task) *Execution {
   return <-me.taskRetCh
 }
 
-// Pause pauses this executor. Pause blocks until all tasks in this executor
-// have actually stopped.
-// Pause is draft API and is subject to change.
+// Pause pauses this executor. Pause blocks until all running tasks in this
+// executor have either ended or called Yield or Sleep on their Execution
+// instance.
 func (me *MultiExecutor) Pause() {
   me.Start(kPauseTask)
 }
 
-// Resume resumes this executor. 
-// Resume is draft API and is subject to change.
+// Resume resumes this once paused executor by letting any in-progress
+// tasks that had called Yield or Sleep on their Execution instance continue.
 func (me *MultiExecutor) Resume() {
   me.Start(kResumeTask)
 }
