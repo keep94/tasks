@@ -412,6 +412,43 @@ func TestSingleExecutorPause(t *testing.T) {
   se.Pause()
 }
 
+func TestInterruptWhilePaused(t *testing.T) {
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &fakeTask2{runDuration: time.Hour, Starting: starting}
+  task2 := &fakeTask2{runDuration: time.Hour, Starting: starting}
+  task3 := &fakeTask2{runDuration: time.Hour, Starting: starting}
+  se := tasks.NewSingleExecutor()
+  e1 := se.Start(task1)
+  waitForStarts(starting, 1)
+  se.Pause()
+  ctask, _ := se.Current()
+  if ctask != task1 {
+    t.Error("Expect current task to be task1")
+  }
+  expectFalse(t, "e1.IsDone()", e1.IsDone())
+  e2 := se.Start(task2)
+  expectTrue(t, "e1.IsDone()", e1.IsDone())
+  ctask, _ = se.Current()
+  if ctask != task2 {
+    t.Error("Expect current task to be task2")
+  }
+  time.Sleep(time.Millisecond)
+  assertNoStarting(t, starting)
+  expectFalse(t, "e2.IsDone()", e2.IsDone())
+  e3 := se.Start(task3)
+  expectTrue(t, "e2.IsDone()", e2.IsDone())
+  ctask, _ = se.Current()
+  if ctask != task3 {
+    t.Error("Expect current task to be task3")
+  }
+  time.Sleep(time.Millisecond)
+  assertNoStarting(t, starting)
+  expectFalse(t, "e3.IsDone()", e3.IsDone())
+  se.Close()
+  expectTrue(t, "e3.IsDone()", e3.IsDone())
+}
+
 func TestPauseParallel(t *testing.T) {
   starting := make(chan bool, 100)
   defer close(starting)
@@ -432,10 +469,7 @@ func TestPauseParallel(t *testing.T) {
     expected = out
   }
   time.Sleep(5 * time.Millisecond)
-  if out := task.Count(); out != expected {
-    t.Errorf("Expected count of %d, got %d", expected, out)
-    expected = out
-  }
+  assertNoStarting(t, starting)
   se.Resume()
   waitForStarts(starting, len(ts))
   se.Pause()
@@ -447,9 +481,7 @@ func TestPauseParallel(t *testing.T) {
     expected = out
   }
   time.Sleep(5 * time.Millisecond)
-  if out := task.Count(); out != expected {
-    t.Errorf("Expected count of %d, got %d", expected, out)
-  }
+  assertNoStarting(t, starting)
   e.End()
   <-e.Done()
 }
@@ -474,10 +506,7 @@ func TestPauseSeries(t *testing.T) {
     expected = out
   }
   time.Sleep(5 * time.Millisecond)
-  if out := task.Count(); out != expected {
-    t.Errorf("Expected count of %d, got %d", expected, out)
-    expected = out
-  }
+  assertNoStarting(t, starting)
   se.Resume()
   se.Resume()
   waitForStarts(starting, 1)
@@ -488,10 +517,7 @@ func TestPauseSeries(t *testing.T) {
     expected = out
   }
   time.Sleep(5 * time.Millisecond)
-  if out := task.Count(); out != expected {
-    t.Errorf("Expected count of %d, got %d", expected, out)
-    expected = out
-  }
+  assertNoStarting(t, starting)
   se.Resume()
   e.End()
   <-e.Done()
@@ -525,18 +551,14 @@ func TestSingleExecutorPauseFromBeginning(t *testing.T) {
   se.Pause()
   e := se.Start(&taskStruct{tasks.RepeatingTask(task, 2147483647)})
   time.Sleep(5 * time.Millisecond)
-  expected := 0
-  if out := task.Count(); out != expected {
-    t.Errorf("Expected count of %d, got %d", expected, out)
-    // For next test, we expect count not to change from this test
-    expected = out
-  }
+  assertNoStarting(t, starting)
   se.Resume()
   waitForStarts(starting, 1)
   se.Pause()
-  expected += 1
+  expected := 1
   if out := task.Count(); out != expected {
     t.Errorf("Expected count of %d, got %d", expected, out)
+    expected = out
   }
   e.End()
   <-e.Done()
@@ -638,6 +660,26 @@ func verifyRepeatingTask(t *testing.T, n int) {
   <-e.Done()
   if task.timesRun != n {
     t.Errorf("Expected %d, got %d", n, task.timesRun)
+  }
+}
+
+func expectFalse(t *testing.T, desc string, val bool) {
+  if val {
+    t.Errorf("Expected %s to be false.", desc)
+  }
+}
+
+func expectTrue(t *testing.T, desc string, val bool) {
+  if !val {
+    t.Errorf("Expected %s to be true.", desc)
+  }
+}
+
+func assertNoStarting(t *testing.T, starting <-chan bool) {
+  select {
+    case <-starting:
+      t.Fatal("Expected no one starting")
+    default:
   }
 }
 

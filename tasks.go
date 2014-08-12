@@ -143,8 +143,10 @@ func (e *Execution) IsEnded() bool {
 // Sleep sleeps for the specified duration or until this execution should
 // end, whichever comes first. Sleep returns false if it returned early
 // because this execution should end; otherwise it returns true.
-// If paused, the sleep timer continues to run normally; however, Sleep will
-// continue to block while paused even after the sleep timer runs out.
+// If paused, the sleep timer continues to run normally; however, after the
+// sleep timer runs out, Sleep will continue to block until either this
+// execution is signaled to end (in which case it returns false) 
+// or unpaused (in which case it returns true).
 func (e *Execution) Sleep(d time.Duration) bool {
   return e.Yield(func() {
     e.sleep(d)
@@ -153,8 +155,10 @@ func (e *Execution) Sleep(d time.Duration) bool {
 
 // Yield runs sleepFunc and after that returns true unless this exeuction
 // was signaled to end in which case it returns false. sleepFunc can be nil.
-// If paused, sleepFunc continues to run uninterrupted; however, Yield will
-// continue to block while paused even after sleepFunc ends.
+// If paused, sleepFunc continues to run uninterrupted; however, after 
+// sleepFunc returns, Yield will continue to block until either this
+// execution is signaled to end (in which case it returns false)
+// or unpaused (in which case it returns true).
 func (e *Execution) Yield(sleepFunc func()) bool {
   return e.g.Yield(sleepFunc)
 }
@@ -269,9 +273,11 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
 }
 
 // SingleExecutor executes tasks one at a time. SingleExecutor instances are
-// safe to use with multiple goroutines. Clients should consider
-// SingleExecutor and MultiExecutor using the same underlying type an
-// implementation detail that could change in the future. 
+// safe to use with multiple goroutines.
+// Tasks used with MultiExecutor must support equality. For instance, the
+// underlying type used for Task could be a pointer type.
+// Clients should consider SingleExecutor and MultiExecutor using the same
+// underlying type an implementation detail that could change in the future. 
 type SingleExecutor MultiExecutor
 
 // NewSingleExecutor returns a new SingleExecutor.
@@ -332,6 +338,9 @@ type TaskCollection interface {
 // MultiExecutor executes multiple tasks at one time while ensuring that no
 // conflicting tasks execute in parallel.
 // MultiExecutor is safe to use with multiple goroutines.
+// Because of TaskCollection.Remove, tasks used with MultiExecutor must
+// support equality. For instance, the underlying type used for Task could be
+// a pointer type.
 type MultiExecutor struct {
   tc TaskCollection
   taskCh chan Task
