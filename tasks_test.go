@@ -412,6 +412,57 @@ func TestSingleExecutorPause(t *testing.T) {
   se.Pause()
 }
 
+func TestPauseNotSupported(t *testing.T) {
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &pauseTask{Starting: starting}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  e := se.Start(task1)
+  waitForStarts(starting, 1)
+
+  // Since this task doesn't support pause, this Pause() call won't return
+  // until the task is finished.
+  se.Pause()
+  if out := task1.Count(); out != 1 {
+    t.Errorf("Expected 1, got %d", out)
+  }
+  // A paused task can still end on its own. The only
+  // guarantee is that the paused task won't do any additional work.
+  <-e.Done()
+}
+
+func TestPauseNotSupportedParallel(t *testing.T) {
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &pauseTask{Starting: starting}
+  ts := make([]tasks.Task, 20)
+  for i := range ts {
+    ts[i] = task1
+  }
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  e := se.Start(&taskStruct{tasks.ParallelTasks(ts...)})
+  waitForStarts(starting, len(ts))
+
+  // Since these parallel tasks don't support pause, this Pause() call
+  // won't return until all the tasks have finished.
+  se.Pause()
+  if out := task1.Count(); out != len(ts) {
+    t.Errorf("Expected %d, got %d", len(ts), out)
+  }
+  // A paused task can still end on its own. The only
+  // guarantee is that the paused task won't do any additional work.
+  <-e.Done()
+}
+
+func TestPauseNoTasks(t *testing.T) {
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  se.Pause()
+  se.Resume()
+}
+
 func TestInterruptWhilePaused(t *testing.T) {
   starting := make(chan bool, 100)
   defer close(starting)
