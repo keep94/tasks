@@ -518,6 +518,10 @@ func (p parallelTasks) Do(e *Execution) {
       defer wg.Done()
       e.g.Arrive()
       defer e.g.Leave()
+      paused, ended := e.g.Wait()
+      if paused && ended {
+        return
+      }
       t.Do(e)
     }(task)
   }

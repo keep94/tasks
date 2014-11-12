@@ -456,6 +456,44 @@ func TestPauseNotSupportedParallel(t *testing.T) {
   <-e.Done()
 }
 
+func TestPauseNotSupportedPauseEarly(t *testing.T) {
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &pauseTask{Starting: starting}
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  se.Start(task1)
+  se.Pause()
+
+  // Acknowledge if the task completed while pausing
+  waitForStarts(starting, task1.Count())
+  time.Sleep(time.Millisecond)
+
+  // No new tasks should start
+  assertNoStarting(t, starting)
+}
+
+func TestPauseNotSupportedParallelPauseEarly(t *testing.T) {
+  starting := make(chan bool, 100)
+  defer close(starting)
+  task1 := &pauseTask{Starting: starting}
+  ts := make([]tasks.Task, 20)
+  for i := range ts {
+    ts[i] = task1
+  }
+  se := tasks.NewSingleExecutor()
+  defer se.Close()
+  se.Start(&taskStruct{tasks.ParallelTasks(ts...)})
+  se.Pause()
+
+  // Acknowledge the tasks that completed while pausing
+  waitForStarts(starting, task1.Count())
+  time.Sleep(time.Millisecond)
+
+  // No new tasks should start
+  assertNoStarting(t, starting)
+}
+
 func TestPauseNoTasks(t *testing.T) {
   se := tasks.NewSingleExecutor()
   defer se.Close()
