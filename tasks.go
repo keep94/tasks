@@ -272,9 +272,9 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
   return result
 }
 
-// SingleExecutor executes tasks one at a time. SingleExecutor instances are
-// safe to use with multiple goroutines.
-// Tasks used with MultiExecutor must support equality. For instance, the
+// SingleExecutor executes tasks one at a time.
+// SingleExecutor instances are safe to use with multiple goroutines.
+// Tasks used with SingleExecutor must support equality. For instance, the
 // underlying type used for Task could be a pointer type.
 // Clients should consider SingleExecutor and MultiExecutor using the same
 // underlying type an implementation detail that could change in the future. 
@@ -295,19 +295,24 @@ func (se *SingleExecutor) Start(t Task) *Execution {
 // Pause pauses this executor. Pause blocks until all running tasks in this
 // executor have either ended or called Yield or Sleep on their Execution
 // instance.
+// Pause() and Resume() must be called from the same goroutine.
+// Calling Pause() and Resume() concurrently from different goroutines
+// causes undefined behavior and may cause Pause() to block indefinitely.
 func (se *SingleExecutor) Pause() {
   (*MultiExecutor)(se).Pause()
 }
 
 // Resume resumes this once paused executor by letting any in-progress
 // tasks that had called Yield or Sleep on their Execution instance continue.
+// Pause() and Resume() must be called from the same goroutine.
+// Calling Pause() and Resume() concurrently from different goroutines
+// causes undefined behavior and may cause Pause() to block indefinitely.
 func (se *SingleExecutor) Resume() {
   (*MultiExecutor)(se).Resume()
 }
 
 // Current returns the current running task and its execution. If no task
-// is running, Current may return nil, nil or it may return the last run
-// task along with its execution.
+// is running, Current returns nil, nil.
 func (se *SingleExecutor) Current() (Task, *Execution) {
   return (*MultiExecutor)(se).Tasks().(*singleTaskCollection).Current()
 }
@@ -373,12 +378,18 @@ func (me *MultiExecutor) Start(t Task) *Execution {
 // Pause pauses this executor. Pause blocks until all running tasks in this
 // executor have either ended or called Yield or Sleep on their Execution
 // instance.
+// Pause() and Resume() must be called from the same goroutine.
+// Calling Pause() and Resume() concurrently from different goroutines
+// causes undefined behavior and may cause Pause() to block indefinitely.
 func (me *MultiExecutor) Pause() {
   me.Start(kPauseTask)
 }
 
 // Resume resumes this once paused executor by letting any in-progress
 // tasks that had called Yield or Sleep on their Execution instance continue.
+// Pause() and Resume() must be called from the same goroutine.
+// Calling Pause() and Resume() concurrently from different goroutines
+// causes undefined behavior and may cause Pause() to block indefinitely.
 func (me *MultiExecutor) Resume() {
   me.Start(kResumeTask)
 }

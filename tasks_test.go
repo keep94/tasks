@@ -342,7 +342,6 @@ func TestSingleExecutorStart(t *testing.T) {
     t.Error("Expect Current to be task 3.")
   }
   <-e.Done()
-  time.Sleep(time.Millisecond)
   if tk, ex := se.Current(); tk != nil || ex != nil {
     t.Error("Expected current task and execution to be nil.")
   }
