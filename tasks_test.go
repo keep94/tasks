@@ -652,6 +652,56 @@ func TestSingleExecutorPauseFromBeginning(t *testing.T) {
   <-e.Done()
 }
 
+func TestFakeClock(t *testing.T) {
+  fakeClock := tasks.NewFakeClock(kNow)
+  // Read from this to be sure all goroutines are blocked on After
+  startChannel := make(chan bool, 6)
+
+  // Read from this to acknowledge finished goroutines
+  doneChannel := make(chan bool, 6)
+
+  routine := func(blockDuration time.Duration, etime time.Time) {
+    ch := fakeClock.After(blockDuration)
+    startChannel <- true
+    ctime := <-ch
+    if ctime != etime {
+      t.Errorf("Expected time %v, got %v", etime, ctime)
+    }
+    doneChannel <- true
+  }
+  // This one quits immediately
+  go routine(0, kNow)
+
+  // These will have quit after one minute
+  go routine(45 * time.Second, kNow.Add(time.Minute))
+  go routine(time.Minute, kNow.Add(time.Minute))
+
+  // These will have quit after 3 minutes
+  go routine(2 * time.Minute, kNow.Add(3 * time.Minute))
+  go routine(2 * time.Minute, kNow.Add(3 * time.Minute))
+  go routine(3 * time.Minute, kNow.Add(3 * time.Minute))
+
+  // Be sure goroutines are blocked on After.
+  for i := 0; i < 6; i++ {
+    <-startChannel
+  }
+
+  // First goroutine will be done
+  <-doneChannel
+
+  // Advance by 1 minute this should unblock the next two goroutines
+  fakeClock.Advance(time.Minute)
+  <-doneChannel
+  <-doneChannel
+
+  // Advance by 2 more minutes this should unblock the rest
+  fakeClock.Advance(2 * time.Minute)
+  <-doneChannel
+  <-doneChannel
+  <-doneChannel
+}
+
+
 type pauseTask struct {
   Starting chan bool
   count int            // Number of completed runs.

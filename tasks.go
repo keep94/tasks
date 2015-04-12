@@ -80,12 +80,13 @@ func RunForTesting(task Task, clock Clock) (err error) {
 // Start starts a task in a separate goroutine and returns immediately.
 // Start returns that particular execution of the task.
 func Start(task Task) *Execution {
-  return startForPause(task, nil, false)
+  return startForPause(task, systemClock{}, nil, false)
 }
 
-func startForPause(task Task, cleanup func(Task), paused bool) *Execution {
+func startForPause(
+    task Task, clock Clock, cleanup func(Task), paused bool) *Execution {
   execution := &Execution{
-      Clock: systemClock{},
+      Clock: clock,
       done: make(chan struct{}),
       ended: make(chan struct{}),
       g: newGate(paused)}
@@ -272,6 +273,58 @@ func (c *ClockForTesting) After(d time.Duration) <-chan time.Time {
   return result
 }
 
+// FakeClock is a test implementation of clock that is safe with multiple
+// goroutines. This clock's time stays the same, unless moved forwared with the
+// Advance method.
+type FakeClock struct {
+  lock sync.Mutex
+  cond sync.Cond
+  current time.Time
+}
+
+// NewFakeClock creates a new FakeClock with a particular current time.
+func NewFakeClock(currentTime time.Time) *FakeClock {
+  result := &FakeClock{current: currentTime}
+  result.cond.L = &result.lock
+  return result
+}
+
+// Now returns the current time.
+func (f *FakeClock) Now() time.Time {
+  f.lock.Lock()
+  defer f.lock.Unlock()
+  return f.current
+}
+
+// After waits for duration d to elapse and then sends the current time on the
+// returned channel.
+func (f *FakeClock) After(d time.Duration) <-chan time.Time {
+  result := make(chan time.Time, 1)
+  targetTime := f.Now().Add(d)
+  go func() {
+    defer close(result)
+    f.lock.Lock()
+    defer f.lock.Unlock()
+    for f.current.Before(targetTime) {
+      f.cond.Wait()
+    }
+    result <- f.current
+  }()
+  return result
+}
+
+// Advance moves the current time forward by d. Current time cannot be moved
+// backward.
+func (f *FakeClock) Advance(d time.Duration) {
+  if d < 0 {
+    panic("Duration can't be negative.")
+  }
+  f.lock.Lock()
+  defer f.lock.Unlock()
+  f.current = f.current.Add(d)
+  f.cond.Broadcast()
+}
+
 // SingleExecutor executes tasks one at a time.
 // SingleExecutor instances are safe to use with multiple goroutines.
 // Tasks used with SingleExecutor must support equality. For instance, the
@@ -348,6 +401,7 @@ type TaskCollection interface {
 // a pointer type.
 type MultiExecutor struct {
   tc TaskCollection
+  clock Clock
   taskCh chan Task
   taskRetCh chan *Execution
 }
@@ -356,8 +410,15 @@ type MultiExecutor struct {
 // will hold running tasks. tc shall be safe to use with multiple goroutines
 // and each MultiExecutor shall have its own TaskCollection instance.
 func NewMultiExecutor(tc TaskCollection) *MultiExecutor {
+  return NewMultiExecutorWithClock(tc, systemClock{})
+}
+
+// NewMultiExecutorWithClock works just like NewMultiExecutor but creates a
+// MultiExecutor that uses a clock that differs from the system clock.
+func NewMultiExecutorWithClock(tc TaskCollection, clock Clock) *MultiExecutor {
   result := &MultiExecutor{
       tc: tc,
+      clock: clock,
       taskCh: make(chan Task),
       taskRetCh: make(chan *Execution)}
   go result.loop()
@@ -438,6 +499,7 @@ func (me *MultiExecutor) loop() {
     // of running tasks when it completes.
     exec := startForPause(
         t,
+        me.clock,
         func(tk Task) {
           me.tc.Remove(tk)
         },
@@ -449,6 +511,11 @@ func (me *MultiExecutor) loop() {
     // Tell Start method that we have started
     me.taskRetCh <- exec
   }
+}
+
+// SystemClock returns the system implementation of the Clock interface.
+func SystemClock() Clock {
+  return systemClock{}
 }
 
 type singleTaskCollection struct {
