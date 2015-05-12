@@ -19,6 +19,23 @@ var (
   kResumeTask Task = resumeTask{}
 )
 
+var (
+  timeOffset time.Duration
+)
+
+// SetTime sets the time for the system implementation of Clock to some
+// other time besides the actual system time. See SystemClock() function.
+// SetTime needs to be called only to simulate a certain time for testing
+// purposes. After, SetTime is called, the clock continues to advance at
+// the normal rate from the new time. If SetTime is called, it should be
+// called once at program startup. It is not safe to call after there are
+// multiple goroutines. Note that SetTime does not change the system clock.
+// Instead, it adds a fixed offset to achieve the new time.
+// SetTime is draft API and is subject to change.
+func SetTime(newTime time.Time) {
+  timeOffset = newTime.Sub(time.Now())
+}
+
 // Task represents any task
 type Task interface {
 
@@ -643,7 +660,7 @@ type systemClock struct {
 }
 
 func (s systemClock) Now() time.Time {
-  return time.Now()
+  return time.Now().Add(timeOffset)
 }
 
 func (s systemClock) After(d time.Duration) <-chan time.Time {
