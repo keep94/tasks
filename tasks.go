@@ -31,7 +31,6 @@ var (
 // called once at program startup. It is not safe to call after there are
 // multiple goroutines. Note that SetTime does not change the system clock.
 // Instead, it adds a fixed offset to achieve the new time.
-// SetTime is draft API and is subject to change.
 func SetTime(newTime time.Time) {
 	timeOffset = newTime.Sub(time.Now())
 }
